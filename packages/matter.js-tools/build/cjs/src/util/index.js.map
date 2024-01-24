@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../src/util/index.ts"],
+  "sourcesContent": ["/**\n * @license\n * Copyright 2022-2023 Project CHIP Authors\n * SPDX-License-Identifier: Apache-2.0\n */\n\nexport * from \"./errors.js\";\nexport * from \"./package.js\";\n"],
+  "mappings": ";;;;;;;;;;;;;;;AAAA;AAAA;AAMA,yBAAc,wBANd;AAOA,yBAAc,yBAPd;AAAA;AAAA;AAAA;AAAA;AAAA;",
+  "names": []
+}

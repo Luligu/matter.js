@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../src/testing/global-declarations.ts"],
+  "sourcesContent": ["/**\n * @license\n * Copyright 2022-2023 Project CHIP Authors\n * SPDX-License-Identifier: Apache-2.0\n */\n\nimport type Chai from \"chai\";\nimport \"chai-as-promised\";\nimport type { MockLogger } from \"./mocks/logging.js\";\nimport type { MockTime } from \"./mocks/time.js\";\n\ndeclare global {\n    // Expose Chai globally\n    const expect: typeof Chai.expect;\n\n    // Expose API for controlling time\n    let MockTime: MockTime;\n\n    // Expose API for controlling logging\n    let MockLogger: MockLogger;\n\n    /**\n     * If present, the following hooks are engaged by matter.js packages to\n     * enable mocking.  We use globals rather than imports so we can hook the\n     * modules regardless of whether they're loaded as CommonJS or ESM.\n     */\n    let MatterHooks:\n        | undefined\n        | {\n              /**\n               * Configure time.\n               */\n              timeSetup?: (Time: any) => void;\n\n              /**\n               * Configure logging.\n               */\n              loggerSetup?: (Logger: any) => void;\n\n              /**\n               * Configure crypto.\n               */\n              cryptoSetup?: (Crypto: any) => void;\n\n              /**\n               * Receive intercepted log messages.  The logging mocks\n               */\n              loggerSink?: (level: number, message: string) => void;\n          };\n}\n"],
+  "mappings": ";AAOA,8BAAO;AAPP;AAAA;AAAA;AAAA;AAAA;",
+  "names": []
+}

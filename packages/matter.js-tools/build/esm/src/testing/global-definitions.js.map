@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../src/testing/global-definitions.ts"],
+  "sourcesContent": ["/**\n * @license\n * Copyright 2022-2023 Project CHIP Authors\n * SPDX-License-Identifier: Apache-2.0\n */\n\n// Note - we don't import mocha here because in the browser we load their\n// standard browser bundle which is different from the Node version\n\nimport Chai from \"chai\";\nimport ChaiAsPromised from \"chai-as-promised\";\nimport { browserSetup, generalSetup } from \"./mocha.js\";\nimport { cryptoSetup } from \"./mocks/crypto.js\";\nimport { TheMockLogger, loggerSetup } from \"./mocks/logging.js\";\nimport { TheMockTime, timeSetup } from \"./mocks/time.js\";\n\nChai.use(ChaiAsPromised);\n\nObject.assign(globalThis as any, {\n    expect: Chai.expect,\n});\n\nObject.assign(globalThis, {\n    MatterHooks: {\n        loggerSetup: loggerSetup,\n        timeSetup: timeSetup,\n        cryptoSetup: cryptoSetup,\n    },\n\n    MockTime: TheMockTime,\n    MockLogger: TheMockLogger,\n});\n\nif (typeof window === \"object\" && globalThis === window) {\n    generalSetup(Mocha);\n    browserSetup(mocha);\n}\n"],
+  "mappings": "AAAA;AAAA;AAAA;AAAA;AAAA;AASA,OAAO,UAAU;AACjB,OAAO,oBAAoB;AAC3B,SAAS,cAAc,oBAAoB;AAC3C,SAAS,mBAAmB;AAC5B,SAAS,eAAe,mBAAmB;AAC3C,SAAS,aAAa,iBAAiB;AAEvC,KAAK,IAAI,cAAc;AAEvB,OAAO,OAAO,YAAmB;AAAA,EAC7B,QAAQ,KAAK;AACjB,CAAC;AAED,OAAO,OAAO,YAAY;AAAA,EACtB,aAAa;AAAA,IACT;AAAA,IACA;AAAA,IACA;AAAA,EACJ;AAAA,EAEA,UAAU;AAAA,EACV,YAAY;AAChB,CAAC;AAED,IAAI,OAAO,WAAW,YAAY,eAAe,QAAQ;AACrD,eAAa,KAAK;AAClB,eAAa,KAAK;AACtB;",
+  "names": []
+}

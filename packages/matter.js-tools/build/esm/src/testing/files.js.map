@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../src/testing/files.ts"],
+  "sourcesContent": ["/**\n * @license\n * Copyright 2022-2023 Project CHIP Authors\n * SPDX-License-Identifier: Apache-2.0\n */\n\nimport { existsSync } from \"fs\";\nimport { Package } from \"../util/package.js\";\n\nexport function listSupportFiles(format = \"cjs\") {\n    const files = Array<string>();\n\n    // Always load tooling code in ESM format as tooling globals load as ESM\n    files.push(Package.tools.resolve(\"dist/esm/testing/global-definitions.js\"));\n    files.push(Package.tools.resolve(\"dist/esm/testing/mocks/index.js\"));\n\n    // Package code should load in the format being tested\n    const config = new Package().resolve(`build/${format}/test/test.config.js`);\n    if (existsSync(config)) {\n        files.push(config);\n    }\n\n    return files;\n}\n"],
+  "mappings": "AAAA;AAAA;AAAA;AAAA;AAAA;AAMA,SAAS,kBAAkB;AAC3B,SAAS,eAAe;AAEjB,SAAS,iBAAiB,SAAS,OAAO;AAC7C,QAAM,QAAQ,MAAc;AAG5B,QAAM,KAAK,QAAQ,MAAM,QAAQ,wCAAwC,CAAC;AAC1E,QAAM,KAAK,QAAQ,MAAM,QAAQ,iCAAiC,CAAC;AAGnE,QAAM,SAAS,IAAI,QAAQ,EAAE,QAAQ,SAAS,MAAM,sBAAsB;AAC1E,MAAI,WAAW,MAAM,GAAG;AACpB,UAAM,KAAK,MAAM;AAAA,EACrB;AAEA,SAAO;AACX;",
+  "names": []
+}

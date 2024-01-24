@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../../src/testing/mocks/index.ts"],
+  "sourcesContent": ["/**\n * @license\n * Copyright 2022-2023 Project CHIP Authors\n * SPDX-License-Identifier: Apache-2.0\n */\n\nimport \"./logging.js\";\nexport * from \"./crypto.js\";\nexport * from \"./time.js\";\n"],
+  "mappings": ";;;;;;;;;;;;;;;AAAA;AAAA;AAMA,qBAAO;AACP,0BAAc,wBAPd;AAQA,0BAAc,sBARd;AAAA;AAAA;AAAA;AAAA;AAAA;",
+  "names": []
+}

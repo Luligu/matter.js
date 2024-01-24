@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../../src/testing/mocks/crypto.ts"],
+  "sourcesContent": ["/**\n * @license\n * Copyright 2022-2023 Project CHIP Authors\n * SPDX-License-Identifier: Apache-2.0\n */\n\n/**\n * An extremely minimal Crypto mock.\n */\nconst TheCrypto = {\n    getRandomData: (length: number) => {\n        // Make random data deterministic\n        return new Uint8Array(length);\n    },\n};\n\nexport function cryptoSetup(Crypto: any) {\n    Crypto.get = () => TheCrypto;\n}\n"],
+  "mappings": "AAAA;AAAA;AAAA;AAAA;AAAA;AASA,MAAM,YAAY;AAAA,EACd,eAAe,CAAC,WAAmB;AAE/B,WAAO,IAAI,WAAW,MAAM;AAAA,EAChC;AACJ;AAEO,SAAS,YAAY,QAAa;AACrC,SAAO,MAAM,MAAM;AACvB;",
+  "names": []
+}

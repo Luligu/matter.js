@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../src/building/error.ts"],
+  "sourcesContent": ["/**\n * @license\n * Copyright 2022-2023 Project CHIP Authors\n * SPDX-License-Identifier: Apache-2.0\n */\n\nexport class InternalBuildError extends Error {\n    constructor(message: string) {\n        super(message);\n    }\n}\n\nexport class BuildError extends Error {\n    constructor(readonly diagnostics: string) {\n        super();\n    }\n}\n"],
+  "mappings": "AAAA;AAAA;AAAA;AAAA;AAAA;AAMO,MAAM,2BAA2B,MAAM;AAAA,EAC1C,YAAY,SAAiB;AACzB,UAAM,OAAO;AAAA,EACjB;AACJ;AAEO,MAAM,mBAAmB,MAAM;AAAA,EAClC,YAAqB,aAAqB;AACtC,UAAM;AADW;AAAA,EAErB;AACJ;",
+  "names": []
+}

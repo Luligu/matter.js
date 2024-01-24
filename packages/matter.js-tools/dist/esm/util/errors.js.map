@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../../src/util/errors.ts"],
+  "sourcesContent": ["/**\n * @license\n * Copyright 2022-2023 Project CHIP Authors\n * SPDX-License-Identifier: Apache-2.0\n */\n\nexport async function ignoreError<T>(code: string, fn: () => Promise<T>): Promise<T | undefined> {\n    try {\n        return await fn();\n    } catch (e) {\n        if ((e as any).code !== code) {\n            throw e;\n        }\n    }\n}\n\nexport function ignoreErrorSync<T>(code: string, fn: () => T): T | undefined {\n    try {\n        return fn();\n    } catch (e) {\n        if ((e as any).code !== code) {\n            throw e;\n        }\n    }\n}\n"],
+  "mappings": "AAAA;AAAA;AAAA;AAAA;AAAA;AAMA,eAAsB,YAAe,MAAc,IAA8C;AAC7F,MAAI;AACA,WAAO,MAAM,GAAG;AAAA,EACpB,SAAS,GAAG;AACR,QAAK,EAAU,SAAS,MAAM;AAC1B,YAAM;AAAA,IACV;AAAA,EACJ;AACJ;AAEO,SAAS,gBAAmB,MAAc,IAA4B;AACzE,MAAI;AACA,WAAO,GAAG;AAAA,EACd,SAAS,GAAG;AACR,QAAK,EAAU,SAAS,MAAM;AAC1B,YAAM;AAAA,IACV;AAAA,EACJ;AACJ;",
+  "names": []
+}

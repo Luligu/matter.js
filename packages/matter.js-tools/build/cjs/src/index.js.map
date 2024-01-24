@@ -1,0 +1,7 @@
+{
+  "version": 3,
+  "sources": ["../../src/index.ts"],
+  "sourcesContent": ["/**\n * @license\n * Copyright 2022-2023 Project CHIP Authors\n * SPDX-License-Identifier: Apache-2.0\n */\n\nimport \"./testing/global-declarations.js\";\nexport * from \"./testing/mocharc.cjs\";\nexport * from \"./util/package.js\";\n"],
+  "mappings": ";;;;;;;;;;;;;;;AAAA;AAAA;AAMA,iCAAO;AACP,wBAAc,kCAPd;AAQA,wBAAc,8BARd;AAAA;AAAA;AAAA;AAAA;AAAA;",
+  "names": []
+}
