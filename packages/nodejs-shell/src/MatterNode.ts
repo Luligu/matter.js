@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -61,6 +61,7 @@ export class MatterNode {
                     id,
                 },
                 autoConnect: false,
+                adminFabricLabel: "matter.js Shell",
             });
             await this.commissioningController.initializeControllerStore();
 
@@ -69,6 +70,12 @@ export class MatterNode {
                 await controllerStore.erase();
             }
             this.storageContext = controllerStore.storage.createContext("Node");
+
+            if (await this.Store.has("ControllerFabricLabel")) {
+                await this.commissioningController.updateFabricLabel(
+                    await this.Store.get<string>("ControllerFabricLabel", "matter.js Shell"),
+                );
+            }
 
             const storageService = this.#environment.get(StorageService);
             const baseLocation = storageService.location;
@@ -90,6 +97,7 @@ export class MatterNode {
             this.matterController = new MatterServer(this.storageManager, { mdnsInterface: this.netInterface });
             this.commissioningController = new CommissioningController({
                 autoConnect: false,
+                adminFabricLabel: await this.Store.get<string>("ControllerFabricLabel", "matter.js Shell"),
             });
             await this.matterController.addCommissioningController(this.commissioningController);
         }
@@ -173,5 +181,9 @@ export class MatterNode {
                 await callback(device, node);
             }
         }
+    }
+
+    updateFabricLabel(label: string) {
+        return this.commissioningController?.updateFabricLabel(label);
     }
 }

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -14,6 +14,7 @@ import {
     Environmental,
     Lifecycle,
     Logger,
+    MatterAggregateError,
     MatterFlowError,
     Mutex,
     Observable,
@@ -115,7 +116,7 @@ export class SessionManager {
     readonly #globalUnencryptedMessageCounter = new MessageCounter();
     readonly #subscriptionsChanged = Observable<[session: SecureSession, subscription: Subscription]>();
     #sessionParameters;
-    readonly #resubmissionStarted = new Observable<[session: Session]>();
+    readonly #resubmissionStarted = Observable<[session: Session]>();
     readonly #construction: Construction<SessionManager>;
     readonly #observers = new ObserverGroup();
     readonly #subscriptionUpdateMutex = new Mutex(this);
@@ -533,13 +534,16 @@ export class SessionManager {
 
         this.#observers.close();
         await this.#storeResumptionRecords();
-        for (const session of this.#sessions) {
+        const closePromises = this.#sessions.map(async session => {
             await session?.end(false);
             this.#sessions.delete(session);
-        }
+        });
         for (const session of this.#insecureSessions.values()) {
-            await session?.end();
+            closePromises.push(session?.end());
         }
+        await MatterAggregateError.allSettled(closePromises, "Error closing sessions").catch(error =>
+            logger.error(error),
+        );
     }
 
     async clear() {
@@ -558,7 +562,9 @@ export class SessionManager {
         });
     }
 
+    /** Clears all subscriptions for a given node and returns how many were cleared. */
     async clearSubscriptionsForNode(fabricIndex: FabricIndex, nodeId: NodeId, flushSubscriptions?: boolean) {
+        let clearedCount = 0;
         for (const session of this.#sessions) {
             if (session.fabric?.fabricIndex !== fabricIndex) {
                 continue;
@@ -567,7 +573,9 @@ export class SessionManager {
                 continue;
             }
             await session.clearSubscriptions(flushSubscriptions);
+            clearedCount++;
         }
+        return clearedCount;
     }
 }
 

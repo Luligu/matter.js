@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -24,14 +24,19 @@ export type MatterElement = BaseElement & {
     children: MatterElement.Child[];
 };
 
-export function MatterElement(definition: MatterElement.Properties, ...children: MatterElement.Child[]) {
-    return BaseElement(MatterElement.Tag, definition, children) as MatterElement;
+export function MatterElement(definition: MatterElement.Definition, ...children: MatterElement.Child[]) {
+    return BaseElement(MatterElement.Tag, { name: "Matter", children: [], ...definition }, children) as MatterElement;
 }
 
 export namespace MatterElement {
     export type Tag = ElementTag.Matter;
     export const Tag = ElementTag.Matter;
     export type Properties = BaseElement.Properties<MatterElement>;
+    export type Definition = Omit<MatterElement.Properties, "name" | "children"> & {
+        name?: string;
+        children?: MatterElement.Properties["children"];
+    };
+
     export type Child =
         | ClusterElement
         | DeviceTypeElement

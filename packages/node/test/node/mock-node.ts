@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -32,6 +32,7 @@ export class MockPartInitializer extends EndpointInitializer {
     }
 
     async eraseDescendant(_endpoint: Endpoint) {}
+    async deactivateDescendant(_endpoint: Endpoint) {}
 
     createBacking(endpoint: Endpoint, behavior: Behavior.Type) {
         return new ServerBehaviorBacking(endpoint, behavior);
@@ -49,19 +50,23 @@ class MockEndpointStore extends EndpointStore {
 }
 
 class MockEndpointStoreService extends EndpointStoreService {
-    #stores = Array<MockEndpointStore>();
+    #stores = new Map<EndpointNumber, MockEndpointStore>();
     #nextNumber = 1;
 
-    override assignNumber(endpoint: Endpoint<EndpointType.Empty>): void {
+    assignNumber(endpoint: Endpoint<EndpointType.Empty>): void {
         endpoint.number = this.#nextNumber++;
     }
 
-    override storeForEndpoint(endpoint: Endpoint<EndpointType.Empty>): EndpointStore {
-        if (this.#stores[endpoint.number]) {
-            return this.#stores[endpoint.number];
-        }
+    storeForEndpoint(endpoint: Endpoint<EndpointType.Empty>): EndpointStore {
+        const store = this.#stores.get(endpoint.number) ?? new MockEndpointStore(endpoint);
+        this.#stores.set(endpoint.number, store);
+        return store;
+    }
 
-        return (this.#stores[endpoint.number] = new MockEndpointStore(endpoint));
+    deactivateStoreForEndpoint(_endpoint: Endpoint<EndpointType.Empty>) {}
+
+    async eraseStoreForEndpoint(endpoint: Endpoint<EndpointType.Empty>) {
+        this.#stores.delete(endpoint.number);
     }
 }
 

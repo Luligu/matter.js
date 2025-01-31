@@ -1,12 +1,12 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import { Logger } from "../log/Logger.js";
 import { ImplementationError } from "../MatterError.js";
-import { errorOf } from "./Error.js";
+import { asError, errorOf } from "./Error.js";
 import { CrashedDependenciesError, CrashedDependencyError, Lifecycle } from "./Lifecycle.js";
 import { Observable } from "./Observable.js";
 import { MaybePromise } from "./Promises.js";
@@ -233,6 +233,7 @@ export function Construction<const T extends Constructable>(
     let closedReject: undefined | ((error: any) => void);
 
     let error: undefined | Error;
+    let errorForDependencies: undefined | CrashedDependencyError;
     let primaryCauseHandled = false;
     let status = Lifecycle.Status.Inactive;
     let change: Observable<[status: Lifecycle.Status, subject: T]> | undefined;
@@ -305,8 +306,8 @@ export function Construction<const T extends Constructable>(
         },
 
         then<TResult1 = T, TResult2 = never>(
-            onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | undefined | null,
-            onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null,
+            onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | null,
+            onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | null,
         ): Promise<TResult1 | TResult2> {
             const handleRejection = onrejected ? () => onrejected?.(crashedError()) as TResult2 : undefined;
             if (status === Lifecycle.Status.Inactive || status === Lifecycle.Status.Initializing) {
@@ -325,7 +326,7 @@ export function Construction<const T extends Constructable>(
         },
 
         catch<TResult = never>(
-            onrejected?: ((reason: any) => TResult | PromiseLike<TResult>) | undefined | null,
+            onrejected?: ((reason: any) => TResult | PromiseLike<TResult>) | null,
         ): Promise<T | TResult> {
             return this.then(undefined, onrejected);
         },
@@ -458,7 +459,7 @@ export function Construction<const T extends Constructable>(
 
                 case Lifecycle.Status.Destroying:
                     if (newStatus !== Lifecycle.Status.Destroyed) {
-                        throw new ImplementationError("Cannog change status because destruction is ongoing");
+                        throw new ImplementationError("Cannot change status because destruction is ongoing");
                     }
                     break;
 
@@ -473,12 +474,12 @@ export function Construction<const T extends Constructable>(
                 case Lifecycle.Status.Inactive:
                     awaiterPromise = closedPromise = undefined;
                     primaryCauseHandled = false;
-                    error = undefined;
+                    error = errorForDependencies = undefined;
                     break;
 
                 case Lifecycle.Status.Active:
                     awaiterPromise = closedPromise = undefined;
-                    error = undefined;
+                    error = errorForDependencies = undefined;
                     break;
 
                 default:
@@ -498,8 +499,8 @@ export function Construction<const T extends Constructable>(
                 [Symbol.toStringTag]: "AsyncConstruction#primary",
 
                 then<TResult1 = T, TResult2 = never>(
-                    onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | undefined | null,
-                    onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null,
+                    onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | null,
+                    onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | null,
                 ): Promise<TResult1 | TResult2> {
                     let rejectionHandler: undefined | typeof onrejected;
                     if (onrejected) {
@@ -511,7 +512,7 @@ export function Construction<const T extends Constructable>(
                 },
 
                 catch<TResult = never>(
-                    onrejected?: ((reason: any) => TResult | PromiseLike<TResult>) | undefined | null,
+                    onrejected?: ((reason: any) => TResult | PromiseLike<TResult>) | null,
                 ): Promise<T | TResult> {
                     return this.then(undefined, onrejected);
                 },
@@ -534,8 +535,8 @@ export function Construction<const T extends Constructable>(
                 [Symbol.toStringTag]: "AsyncConstruction#primary",
 
                 then<TResult1 = void, TResult2 = never>(
-                    onfulfilled?: ((value: void) => TResult1 | PromiseLike<TResult1>) | undefined | null,
-                    onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null,
+                    onfulfilled?: ((value: void) => TResult1 | PromiseLike<TResult1>) | null,
+                    onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | null,
                 ): Promise<TResult1 | TResult2> {
                     let rejectionHandler: undefined | typeof onrejected;
                     if (onrejected) {
@@ -547,7 +548,7 @@ export function Construction<const T extends Constructable>(
                 },
 
                 catch<TResult = never>(
-                    onrejected?: ((reason: any) => TResult | PromiseLike<TResult>) | undefined | null,
+                    onrejected?: ((reason: any) => TResult | PromiseLike<TResult>) | null,
                 ): Promise<T | TResult> {
                     return this.then(undefined, onrejected);
                 },
@@ -590,6 +591,10 @@ export function Construction<const T extends Constructable>(
             return error;
         }
 
+        if (errorForDependencies) {
+            return errorForDependencies;
+        }
+
         let what;
         if (subject.toString === Object.prototype.toString) {
             what = subject.constructor.name;
@@ -597,9 +602,10 @@ export function Construction<const T extends Constructable>(
             what = subject.toString();
         }
 
-        const crashError = new CrashedDependencyError(what, "unavailable due to initialization error");
-        crashError.subject = subject;
-        return crashError;
+        errorForDependencies = new CrashedDependencyError(what, "unavailable due to initialization error");
+        errorForDependencies.subject = subject;
+        errorForDependencies.cause = error;
+        return errorForDependencies;
     }
 
     function setStatus(newStatus: Lifecycle.Status) {
@@ -691,14 +697,14 @@ export namespace Construction {
         }
 
         const crashed = Object.values(subjectArray).filter(
-            backing => backing.construction.status === Lifecycle.Status.Crashed,
+            subject => subject.construction.status === Lifecycle.Status.Crashed,
         );
         if (crashed.length) {
             let error;
             try {
                 error = onError(crashed);
             } catch (e) {
-                error = e;
+                error = asError(e);
             }
             if (error) {
                 return Promise.reject(error);

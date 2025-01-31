@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -43,7 +43,11 @@ export class ControllerDiscovery {
         logger.info(`Start Discovering devices using identifier ${Logger.toJSON(identifier)} ...`);
 
         const scanResults = scanners.map(async scanner => {
-            const foundDevices = await scanner.findCommissionableDevices(identifier, timeoutSeconds);
+            const foundDevices = await scanner.findCommissionableDevices(
+                identifier,
+                timeoutSeconds,
+                scanner.type === "ble", // Force rediscovery for BLE
+            );
             logger.info(`Found ${foundDevices.length} devices using identifier ${Logger.toJSON(identifier)}`);
             if (foundDevices.length === 0) {
                 throw new CommissioningError(
@@ -193,7 +197,7 @@ export class ControllerDiscovery {
         while (true) {
             logger.debug(
                 `Server addresses to try: ${Array.from(addresses)
-                    .map(([addressString, { device }]) => `${device?.DN}: ${addressString}`)
+                    .map(([addressString, { device }]) => `${addressString}${device?.DN ? ` (${device.DN})` : ""}`)
                     .join(",")}`,
             );
 

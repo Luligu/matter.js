@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -15,7 +15,7 @@ export class MatterError extends Error {
     /**
      * Convert the error to formatted text.
      *
-     * Matter encodes errors with modern JS features including {@link Error#cause} and {@link AggregateError#errors}
+     * matter.js encodes errors with modern JS features including {@link Error#cause} and {@link AggregateError#errors}
      * subfields.  You can use this function to ensure all error details are presented regardless of environment.
      */
     format(format: "plain" | "ansi" | "html" = "plain", indents = 0) {
@@ -142,10 +142,10 @@ export class MatterAggregateError extends AggregateError {
     constructor(causes: Iterable<unknown>, message?: string) {
         causes = [...causes].map(errorOf);
         super(causes, message);
-    }
 
-    [inspect] = MatterError.prototype[inspect];
-    format = MatterError.prototype.format;
+        Object.defineProperty(MatterAggregateError.prototype, inspect, { enumerable: false });
+        Object.defineProperty(MatterAggregateError.prototype, "format", { enumerable: false });
+    }
 
     // TODO - see comment on MatterError.  If that one is correct this is incorrect
     static override [Symbol.hasInstance](instance: unknown) {
@@ -154,7 +154,27 @@ export class MatterAggregateError extends AggregateError {
         }
         return AggregateError[Symbol.hasInstance](instance);
     }
+
+    /**
+     * Wait for all promises to settle and throw an error if any of them reject as MatterAggregateError
+     * (or extended class). Promise results are not returned.
+     * TODO: Enhance the types between call and result to be better unwrapped
+     */
+    static async allSettled(promises: Iterable<unknown>, message = "Errors happened"): Promise<unknown[]> {
+        const results = await Promise.allSettled(promises);
+        const errors = results.filter(result => result.status === "rejected").map(result => result.reason);
+
+        if (errors.length) {
+            throw new this(errors, message);
+        }
+        return (results as PromiseFulfilledResult<unknown>[]).map(result => result.value);
+    }
 }
+
+Object.assign(MatterAggregateError, {
+    [inspect]: MatterError.prototype[inspect],
+    format: MatterError.prototype.format,
+});
 
 /**
  * It's never reasonable to fail to present error information so we include this rudimentary fallback error formatter.

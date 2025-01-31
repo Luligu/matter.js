@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -9,8 +9,7 @@
 import { MatterDefinition } from "../MatterDefinition.js";
 import { ClusterElement as Cluster } from "../../elements/index.js";
 
-export const CarbonMonoxideConcentrationMeasurement = Cluster({
-    name: "CarbonMonoxideConcentrationMeasurement", id: 0x40c, type: "ConcentrationMeasurement",
-    pics: "CMOCONC"
-});
+export const CarbonMonoxideConcentrationMeasurement = Cluster(
+    { name: "CarbonMonoxideConcentrationMeasurement", id: 0x40c, type: "ConcentrationMeasurement", pics: "CMOCONC" }
+);
 MatterDefinition.children.push(CarbonMonoxideConcentrationMeasurement);

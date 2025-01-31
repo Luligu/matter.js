@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -33,6 +33,7 @@ export abstract class FailsafeContext {
     #csrSessionId?: number;
     #forUpdateNoc?: boolean;
     #fabricBuilder = new FabricBuilder();
+    #rootCertSet = false;
 
     #commissioned = AsyncObservable<[], void>();
 
@@ -93,8 +94,12 @@ export abstract class FailsafeContext {
         return this.#forUpdateNoc;
     }
 
+    get rootCertSet() {
+        return this.#rootCertSet;
+    }
+
     get hasRootCert() {
-        return this.#fabricBuilder.hasRootCert();
+        return this.#fabricBuilder.rootCert !== undefined;
     }
 
     get rootCert() {
@@ -153,7 +158,7 @@ export abstract class FailsafeContext {
      */
     createCertificateSigningRequest(isForUpdateNoc: boolean, sessionId: number) {
         if (this.#fabrics.findByKeypair(this.#fabricBuilder.keyPair)) {
-            throw new MatterFlowError("Key pair already exists."); // becomes Failure as StateResponse
+            throw new MatterFlowError("Key pair already exists."); // becomes Failure as StatusResponse
         }
 
         const result = this.#fabricBuilder.createCertificateSigningRequest();
@@ -183,6 +188,7 @@ export abstract class FailsafeContext {
     /** Handles adding a trusted root certificate from Operational Credentials cluster. */
     setRootCert(rootCert: Uint8Array) {
         this.#fabricBuilder.setRootCert(rootCert);
+        this.#rootCertSet = true;
     }
 
     /**

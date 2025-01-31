@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -239,7 +239,7 @@ export function miredsToKelvin(mireds: number): number {
  * @returns color temp in mireds
  */
 export function kelvinToMireds(kelvin: number): number {
-    return 1_000_000 / kelvin;
+    return Math.round(1_000_000 / kelvin);
 }
 
 /**

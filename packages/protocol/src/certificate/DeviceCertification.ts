@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -49,7 +49,7 @@ export class DeviceCertification {
         // We need a dummy construction to avoid errors
         this.#construction = Construction(this, () => {});
 
-        // With a directly provided config or without we con initialize directly
+        // With a directly provided config or without we can initialize directly
         if (config === undefined) {
             if (product === undefined) {
                 throw new ImplementationError(`Cannot generate device certification without product information`);

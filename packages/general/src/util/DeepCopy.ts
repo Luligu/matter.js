@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -26,7 +26,7 @@ export function deepCopy<T>(value: T): T {
             if (Array.isArray(value)) {
                 clone = value.map(copy);
             } else if (ArrayBuffer.isView(value)) {
-                const ViewType = value.constructor as new (buffer: ArrayBuffer) => unknown;
+                const ViewType = value.constructor as new (buffer: ArrayBuffer | SharedArrayBuffer) => unknown;
                 clone = new ViewType(value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength));
             } else {
                 clone = Object.fromEntries(Object.entries(value).map(([k, v]) => [k, copy(v)]));

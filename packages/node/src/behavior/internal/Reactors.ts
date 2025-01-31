@@ -1,12 +1,12 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import { Endpoint } from "#endpoint/Endpoint.js";
 import type { Observable, Observer } from "#general";
-import { ImplementationError, InternalError, Logger, MaybePromise } from "#general";
+import { asError, ImplementationError, InternalError, Logger, MaybePromise } from "#general";
 import { Reactor } from "../Reactor.js";
 import { ActionContext } from "../context/ActionContext.js";
 import { Contextual } from "../context/Contextual.js";
@@ -148,13 +148,13 @@ class ReactorBacking<T extends any[], R> {
                 // An error here means a synchronous reactor that was not trampolined crashed.  We cannot just throw
                 // because there may have been additional reactions triggered by the synchronous reactor so we still
                 // need the trampoline
-                e = this.#augmentError(e);
+                const error = this.#augmentError(e);
                 if (this.#observable.isAsync) {
                     // Async observable with sync reactor
-                    resolution = Promise.reject(e);
+                    resolution = Promise.reject(error);
                 } else {
                     // Sync observable with sync reactor
-                    rejection = e;
+                    rejection = error;
                 }
             }
 
@@ -211,9 +211,6 @@ class ReactorBacking<T extends any[], R> {
     }
 
     #unhandledError(error: unknown) {
-        if (!(error instanceof Error)) {
-            error = new Error(`${error}`);
-        }
         logger.error("Unhandled", this.#augmentError(error));
     }
 
@@ -287,11 +284,6 @@ class ReactorBacking<T extends any[], R> {
 
         // Otherwise run in independent context and errors do not interfere with emitter
         try {
-            let purpose = "react";
-            if (this.#reactor.name) {
-                purpose = `${purpose}<${this.#reactor.name}>`;
-            }
-
             const reactor = (context: ActionContext) => {
                 return this.#reactWithContext(context, this.#owner.backing, args);
             };
@@ -324,7 +316,7 @@ class ReactorBacking<T extends any[], R> {
                     const result = await this.#react(args);
                     resolve(result);
                 } catch (e) {
-                    reject(e);
+                    reject(asError(e));
                 }
             };
 
@@ -407,13 +399,11 @@ class ReactorBacking<T extends any[], R> {
     /**
      * Detail the reactor in error messages for errors triggered during reaction.
      */
-    #augmentError(cause: any) {
-        if (!(cause instanceof Error)) {
-            cause = new Error(cause.toString());
-        }
+    #augmentError(cause: unknown): Error {
+        const error = asError(cause);
 
-        cause.message = `Error in ${this}: ${cause.message}`;
+        error.message = `Error in ${this}: ${error.message}`;
 
-        return cause;
+        return error;
     }
 }

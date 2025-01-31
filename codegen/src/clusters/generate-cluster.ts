@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -12,6 +12,7 @@ import {
     CommandModel,
     conditionToBitmaps,
     Conformance,
+    DefaultValue,
     FeatureBitmap,
     translateBitmap,
     ValueModel,
@@ -136,7 +137,7 @@ function generateMutableCluster(
 
         // Identify features enabled by default.  This is controlled by the default value of supportedFeatures
         const defaultFeatures = new Set<string>();
-        const supportedFeatures = featureMap.effectiveDefault;
+        const supportedFeatures = DefaultValue(file.cluster.scope, featureMap);
         if (typeof supportedFeatures === "number" && supportedFeatures) {
             // There are default supported features
             featureMap.children.forEach(feature => {

@@ -9,7 +9,145 @@ The main work (all changes without a GitHub username in brackets in the below li
 	## __WORK IN PROGRESS__
 -->
 
-## __WORK IN PROGRESS__
+## 0.12.1 (2025-01-25)
+
+-   @matter/protocol
+    - Adjustment: For subscriptions we now trigger event listeners before attribute listeners
+    - Fix: Added force closing of exchanges on shutdown of the node
+
+-   @project-chip/matter.js
+    - Fix: Allows more cases when checking if a device is battery powered to address real world devices
+
+## 0.12.0 (2025-01-23)
+
+-   @matter/general
+    - Enhancement: Limits MDNS expires just to te relevant operational records when removing a fabric
+
+-   @matter/model
+    - Feature: The constraint evaluator now supports simple mathematical expressions
+    - Feature: The constraint evaluator now supports limits on the number of Unicode codepoints in a string
+    - Feature: Default values may now be a reference to another field
+
+-   @matter/node
+    - Feature: Constraint and conformance expressions may now reference values by name in any owner of a constrained value
+    - Enhancement: Each new PASE session now automatically arms the failsafe timer for 60s as required by specs
+    - Enhancement: Optimizes Node shutdown logic to close sessions and subscriptions before shutting down the network
+    - Fix: Fixes withBehaviors() method on endpoints
+
+-   @matter/nodejs
+    - Breaking: Also the Sync Storage classes mainly used in legacy API now have an async close method!
+    - Fix: Converts commissioning.fabrics into dynamically generated property to ensure it is up to date when accessed
+
+-   @matter/nodejs-ble
+    - Enhancement: Restructures BLE connection handling to improve reliability and eliminate hanging commissioning processes
+    - Fix: Adds support for advanced manufacturer data on Windows (Noble update)
+    - Fix: Added workaround for Noble on Windows to prevent discovery issues
+    - Fix: Considers formerly discovered devices as outdated when new discovery is started
+    
+-   @matter/protocol
+    - Feature: Reworks Event server handling and optionally allow Non-Volatile event storage (currently mainly used in tests)
+    - Enhancement: Adds a too-fast-resubmission guard for Unicast MDNS messages
+    - Enhancement: Optimized Logging for messages in various places
+    - Enhancement: Added support for concurrent and non-concurrent commissioning flows
+    - Enhancement: Re-arms the failsafe timer in commissioning flows before steps that could take longer and during operative reconnection
+    - Enhancement: Stores Matter relevant MDNS host information to faster reuse when new SRV announcements come in
+    - Fix: Corrects some Batch invoke checks and logic
+    - Fix: Fixes MDNS discovery duration for retransmission cases to be 5s
+    - Fix: Processes all TXT/SRV records in MDNS messages and optimized the processing
+    - Fix: Prevents multi message interactions from trying to continue on new exchange
+    - Fix: Fixes the timed node polling during discovery
+    - Fix: Fixes commissionable devices discovery with timeout
+    - Fix: Restores the possibility to cancel a (continuous) discovery for commissionable devices
+    - Fix: Fixes enablement of MDNS broadcasts when BLE commissioning is used
+  
+- @project-chip/matter.js
+    - Feature: (Breaking) Added Fabric Label for Controller as required property to initialize the Controller
+        including setting the Fabric Label when commissioning and validating and updating the Fabric Label on
+        connection
+    - Feature: Added autoConnect property to node connection options to allow to not automatically connect to a node when PairedNode instance is created. Also introduces a non-blocking PairedNode.connect() method to connect to a node
+    - Feature: Added CommissioningController.getNode() method to get a PairedNode instance for a node by its node ID without a direct connection
+    - Feature: Allows to update the Fabric Label during controller runtime using `updateFabricLabel()` on CommissioningController
+    - Enhancement: Improves Reconnection Handling for devices that use persisted subscriptions
+    - Enhancement: Use data type definitions from Model for Controller Device type definitions
+    - Enhancement: Added `remove*Listener()` to ClusterClient objects to remove listeners added with `add*Listener()` or `subscribe*()` (The subscription is not cleared!)
+    - Fix: When a paired node gets disconnected (or decommissioned) invalidate subscription handlers to prevent reconnection tries
+
+## 0.11.9 (2024-12-11)
+
+-   @matter/node
+    - BREAKING: WindowCovering: supportsCalibration is moved from state property to an internal property
+    - Enhancement: Enhances the number assertations to only allow finite numbers
+    - Enhancement: WindowCovering: Adds an internal property to disable the operational state and value management by the default implementation to allow device to handle this themselves
+    - Enhancement: EventsBehavior allows for configuration of event buffering
+    - Enhancement: Matter protocol initialization now runs independently of and after behavior initialization, giving behaviors more flexibility in participating in protocol setup
+    - Fix: ColorControl: Do not try to convert color mode details if they are not defined
+    - Fix: ColorControl: colorMode attribute needs to be defined if HS feature is not used because the default value 0 is else invalid
+
+-   @matter/protocol
+    - Fix: Also retry next discovered address when a Channel establishment error for PASE occurs
+    - Fix: Optimizes MDNS cache handling to prevent too early cache invalidation
+
+-   @matter/types
+    - Enhancement: Deprecated fields are now also usable and just flagged as deprecated on generated code
+    - Enhancement: Removes default value from attribute ColorMode of ColorControl cluster because feature specific enum value was used
+
+-   @project-chip/matter.js
+    - BREAKING: In `ContentLauncher` cluster `ParameterEnum` is renamed to `Parameter` and `Parameter` is renamed to `ParameterStruct`
+    - Feature: Introduces PairedNode#triggerReconnect() method to trigger a reconnection
+    - Enhancement: Considers a node in reconnection state that should be decommissioned as already factory reset
+    - Enhancement: Optimizes reconnection handling in Controller API
+    - Fix: Do not try to convert color mode details if they are not defined
+    - Fix: Clusters generated for extensions of base clusters such as Alarm Base and Mode Base now include full details of extended types; in particular extended enums such as Mode Tag were previously insufficiently defined
+
+-   @matter/model
+    - BREAKING: `ClusterModel` and `ValueModel` properties `members`, `activeMembers` and `conformantMembers` are removed; use `Scope#membersOf` instead
+    - Feature: New `Scope` component analyzes scope of a model, caches analysis results, and implements algorithms that require analysis to perform efficiently
+    - Enhancement: Models that define datatypes now inherit from common `ScopeModel` base class
+    - Fix: Extended enums and other types now report the full set of members via `Scope#membersOf`
+
+-   @matter/protocol
+    - Feature: The algorithm that chooses event occurrences to discard when the buffer overflows is now smarter and configurable
+    - Feature: Event occurrence buffering now offers optional persistence
+
+-   @matter/testing
+    - Feature: New test harness supports simplified management of Matter certification tests
+    - Feature: Build system for lightweight (relatively speaking) Docker image with chip-tool and CHIP certification tests available at https://github.com/matter-js/matter.js-chip
+
+## 0.11.8 (2024-11-29)
+
+-   @matter/protocol
+    - Fix: Correctly parse DataReports with duplicate non-Array data entries
+
+-   @matter/node
+    - Fix: Ensures to completely remove all stored endpoint data when endpoint is deleted 
+
+-   Matter cluster definitions and implementations
+    - Fix: Fixes LevelControl cluster extension point definitions and adds a missing parameter
+
+## 0.11.7 (2024-11-28)
+
+-   @matter/node
+    - Fix: Fixes race condition that can partially destroy ACL entries when concurrent writes happen in parallel to ACL writes
+
+## 0.11.6 (2024-11-27)
+
+-   @matter/general
+    - Fix: Fixes a potential recursion in parsing DnsQNames
+
+-   @matter/nodejs
+    - Fix: Fixes a typo and crash case on network closing when ending the matter.js process
+
+-   @matter/protocol
+    - Fix: Adds missing subscription update when endpoint structure changes
+
+-   @matter/types
+    - Fix: Do not use revisions of 0 for Unknown fallbacks
+
+## 0.11.5 (2024-11-25)
+
+-   @matter/create
+    - Feature: Added command line option "--verbose" to enable informational NPM messages during initialization
+    - Feature: Added template "contributor" to bootstrap dev environment for working on matter.js itself
 
 -   @matter/node
     - Enhancement: The `with` functions on endpoint and cluster behavior types now alias to `withBehaviors` and `withFeatures` respectively to make their function more explicit
@@ -19,16 +157,19 @@ The main work (all changes without a GitHub username in brackets in the below li
 
 -   @matter/nodejs
     - Feature: New export @matter/nodejs/config allows for fine-grained configuration of Node.js bootstrap logic
+    - Fix: Restores backward compatibility to sync storages from matter.js <0.11 in case ideas used special characters (uncommon)
 
--   @matter/create
-    - Feature: Added command line option "--verbose" to enable informational NPM messages during initialization
-    - Feature: Added template "contributor" to bootstrap dev environment for working on matter.js itself
+-   @matter/protocol
+    - Fix: Corrects the DataVersion Filter shortening logic to ensure maximum message size is not exceeded 
 
 -   @matter/tools
     - Multi-project test runs now use a single process to improve performance
 
 -   Matter cluster definitions and implementations
+    - Enhancement: Removes default value from attribute ControlSequenceOfOperation of Thermostat cluster because feature specific enum value was used
     - Fix: Reverts MoveToLevel workaround from 0.11.4
+    - Fix: ColorControl: Round calculated Kelvin values when calculated from Mireds
+    - Fix: GeneralDiagnostics: Network interface names are now correctly shortened to 32 characters
 
 -   matter.js git repository
     - Feature: We've added project configuration for VS code including recommended extensions, code snippets and launch configurations

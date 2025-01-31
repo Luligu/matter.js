@@ -1,13 +1,14 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import { Behavior } from "#behavior/Behavior.js";
 import { Datasource } from "#behavior/state/managed/Datasource.js";
 import { Endpoint } from "#endpoint/Endpoint.js";
-import { EndpointStore } from "#endpoint/index.js";
+import { EndpointStore, SupportedElements } from "#endpoint/index.js";
+import { NotImplementedError } from "@matter/general";
 import { BehaviorBacking } from "./BehaviorBacking.js";
 
 /**
@@ -20,5 +21,9 @@ export class ClientBehaviorBacking extends BehaviorBacking {
         super(endpoint, behavior, options);
 
         this.store = endpointStore.storeForBehavior(behavior.id);
+    }
+
+    get elements(): SupportedElements | undefined {
+        throw new NotImplementedError();
     }
 }

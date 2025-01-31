@@ -1,11 +1,12 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import { Behavior } from "#behavior/Behavior.js";
 import { BasicInformationBehavior } from "#behaviors/basic-information";
+import { ImplementationError, Logger, MatterAggregateError } from "#general";
 import {
     Ble,
     FabricAuthority,
@@ -19,6 +20,8 @@ import { CommissioningServer } from "../commissioning/CommissioningServer.js";
 import { NetworkServer } from "../network/NetworkServer.js";
 import { ActiveDiscoveries } from "./discovery/ActiveDiscoveries.js";
 import type { Discovery } from "./discovery/Discovery.js";
+
+const logger = Logger.get("ControllerBehavior");
 
 /**
  * Node controller functionality.
@@ -34,6 +37,11 @@ export class ControllerBehavior extends Behavior {
     declare state: ControllerBehavior.State;
 
     override async initialize() {
+        if (this.state.adminFabricLabel === undefined) {
+            throw new ImplementationError("adminFabricLabel must be set for ControllerBehavior.");
+        }
+        const adminFabricLabel = this.state.adminFabricLabel;
+
         // Configure discovery transports
         if (this.state.ip === undefined) {
             this.state.ip = true;
@@ -58,6 +66,10 @@ export class ControllerBehavior extends Behavior {
                     get vendorId() {
                         return biState.vendorId;
                     }
+
+                    override get adminFabricLabel() {
+                        return adminFabricLabel;
+                    }
                 })(),
             );
         }
@@ -81,7 +93,9 @@ export class ControllerBehavior extends Behavior {
                 discovery.cancel();
             }
 
-            await Promise.allSettled([...discoveries]);
+            await MatterAggregateError.allSettled([...discoveries], "Error while cancelling discoveries").catch(error =>
+                logger.error(error),
+            );
         }
     }
 }
@@ -101,5 +115,10 @@ export namespace ControllerBehavior {
          * By default the controller always scans on IP networks.
          */
         ip?: boolean = undefined;
+
+        /**
+         * Contains the label of the admin fabric which is set for all commissioned devices
+         */
+        adminFabricLabel!: string;
     }
 }

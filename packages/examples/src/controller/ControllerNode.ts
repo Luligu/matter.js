@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -28,7 +28,7 @@ if (environment.vars.get("ble")) {
     Ble.get = singleton(
         () =>
             new NodeJsBle({
-                hciId: environment.vars.number("ble-hci-id"),
+                hciId: environment.vars.number("ble.hci.id"),
             }),
     );
 }
@@ -66,6 +66,10 @@ class ControllerNode {
             ? await controllerStorage.get<string>("uniqueid")
             : (environment.vars.string("uniqueid") ?? Time.nowMs().toString());
         await controllerStorage.set("uniqueid", uniqueId);
+        const adminFabricLabel = (await controllerStorage.has("fabriclabel"))
+            ? await controllerStorage.get<string>("fabriclabel")
+            : (environment.vars.string("fabriclabel") ?? "matter.js Controller");
+        await controllerStorage.set("fabriclabel", adminFabricLabel);
 
         const pairingCode = environment.vars.string("pairingcode");
         let longDiscriminator, setupPin, shortDiscriminator;
@@ -97,10 +101,10 @@ class ControllerNode {
         let ble = false;
         if (environment.vars.get("ble")) {
             ble = true;
-            const wifiSsid = environment.vars.string("ble-wifi-ssid");
-            const wifiCredentials = environment.vars.string("ble-wifi-credentials");
-            const threadNetworkName = environment.vars.string("ble-thread-networkname");
-            const threadOperationalDataset = environment.vars.string("ble-thread-operationaldataset");
+            const wifiSsid = environment.vars.string("ble.wifi.ssid");
+            const wifiCredentials = environment.vars.string("ble.wifi.credentials");
+            const threadNetworkName = environment.vars.string("ble.thread.networkname");
+            const threadOperationalDataset = environment.vars.string("ble.thread.operationaldataset");
             if (wifiSsid !== undefined && wifiCredentials !== undefined) {
                 logger.info(`Registering Commissioning over BLE with WiFi: ${wifiSsid}`);
                 commissioningOptions.wifiNetwork = {
@@ -136,6 +140,7 @@ class ControllerNode {
                 id: uniqueId,
             },
             autoConnect: false,
+            adminFabricLabel,
         });
 
         /**

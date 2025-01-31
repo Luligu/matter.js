@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -91,6 +91,11 @@ export class PromiseQueue {
             }
         }
         this.#queue.length = 0;
+    }
+
+    /** Get the number of promises in the queue. */
+    get count() {
+        return this.#queue.length;
     }
 
     /**

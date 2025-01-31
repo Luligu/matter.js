@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -8,6 +8,7 @@ import { Val } from "#behavior/state/Val.js";
 import { ValueSupervisor } from "#behavior/supervision/ValueSupervisor.js";
 import { NetworkServer } from "#behavior/system/network/NetworkServer.js";
 import { NetworkCommissioningServer } from "#behaviors/network-commissioning";
+import { TimeSynchronizationBehavior } from "#behaviors/time-synchronization";
 import { GeneralDiagnostics } from "#clusters/general-diagnostics";
 import { Endpoint } from "#endpoint/Endpoint.js";
 import { Bytes, ImplementationError, ipv4ToBytes, Logger, Time, Timer } from "#general";
@@ -44,7 +45,7 @@ const schema = Base.schema!.extend({
  * Endpoint gets initialized.
  */
 export class GeneralDiagnosticsServer extends Base {
-    protected declare internal: GeneralDiagnosticsServer.Internal;
+    declare protected internal: GeneralDiagnosticsServer.Internal;
     declare state: GeneralDiagnosticsServer.State;
     schema = schema;
 
@@ -102,9 +103,19 @@ export class GeneralDiagnosticsServer extends Base {
 
     override timeSnapshot() {
         const time = Time.nowMs();
+
+        // TC_DGGEN_2_4.py fails us if we set this without TimeSynchronizationCluster support.  Spec is worded poorly
+        // but my read of "SHALL only if" is "may not unless" and not "SHALL if and only if".  But conforming to tests
+        // for now
+        const posixTimeMs =
+            this.agent.has(TimeSynchronizationBehavior) &&
+            this.agent.get(TimeSynchronizationBehavior).state.utcTime !== null
+                ? time
+                : null;
+
         return {
-            systemTimeMs: time - this.internal.bootUpTime,
-            posixTimeMs: time,
+            systemTimeMs: time - Time.startup.systemMs,
+            posixTimeMs,
         };
     }
 
@@ -280,7 +291,6 @@ export class GeneralDiagnosticsServer extends Base {
         );
 
         // Update the timestamps now that node is really online.
-        this.internal.bootUpTime = Time.nowMs();
         this.internal.lastTotalOperationalHoursCounterUpdateTime = Time.nowMs();
 
         this.internal.lastTotalOperationalHoursTimer = Time.getPeriodicTimer(
@@ -358,7 +368,7 @@ export class GeneralDiagnosticsServer extends Base {
                 isOperational: isOperationalReachable(name),
                 offPremiseServicesReachableIPv4: null, // null means unknown or not supported
                 offPremiseServicesReachableIPv6: null, // null means unknown or not supported
-                hardwareAddress: Bytes.fromHex(mac.replace(/[^\da-fA-F]/g, "")),
+                hardwareAddress: Bytes.fromHex(mac.replace(/[^\da-f]/gi, "")),
                 iPv4Addresses: ipV4.slice(0, 4).map(ip => ipv4ToBytes(ip)),
                 iPv6Addresses: ipV6.slice(0, 8).map(ip => ipv4ToBytes(ip)),
                 type: type ?? networkType,
@@ -368,9 +378,6 @@ export class GeneralDiagnosticsServer extends Base {
 
 export namespace GeneralDiagnosticsServer {
     export class Internal {
-        /** Remember the bootUp time for the device. */
-        bootUpTime: number = Time.nowMs();
-
         /** Last time the total operational hours counter was updated. */
         lastTotalOperationalHoursCounterUpdateTime: number = Time.nowMs();
 
@@ -388,12 +395,11 @@ export namespace GeneralDiagnosticsServer {
         [Val.properties](endpoint: Endpoint, _session: ValueSupervisor.Session) {
             return {
                 /**
-                 * Dynamically calculate the upTime. This is ok because the attribute is not send out via subscriptions
+                 * Dynamically calculate the upTime. This is ok because the attribute is not sent via subscriptions
                  * anyway.
                  */
                 get upTime() {
-                    const bootUpTime = endpoint.behaviors.internalsOf(GeneralDiagnosticsServer).bootUpTime;
-                    return Math.round((Time.nowMs() - bootUpTime) / 1000);
+                    return Math.round((Time.nowMs() - Time.startup.systemMs) / 1000);
                 },
 
                 /**

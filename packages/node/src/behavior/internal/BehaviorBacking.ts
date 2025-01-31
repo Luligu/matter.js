@@ -1,13 +1,15 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { type Agent } from "#endpoint/Agent.js";
+import type { Agent } from "#endpoint/Agent.js";
 import type { Endpoint } from "#endpoint/Endpoint.js";
 import { BehaviorInitializationError } from "#endpoint/errors.js";
+import type { SupportedElements } from "#endpoint/properties/Behaviors.js";
 import { Construction, EventEmitter, ImplementationError, Lifecycle, Logger, MaybePromise, Observable } from "#general";
+import type { ClusterId } from "@matter/types";
 import type { Behavior } from "../Behavior.js";
 import { Reactor } from "../Reactor.js";
 import { Datasource } from "../state/managed/Datasource.js";
@@ -43,7 +45,11 @@ export abstract class BehaviorBacking {
             // The endpoint reports errors during initialization.  For errors occurring later we report the error
             // ourselves
             if (endpoint.lifecycle.isReady) {
-                logger.error(`Error initializing ${this}:`, error);
+                if (error instanceof BehaviorInitializationError) {
+                    logger.error(error);
+                } else {
+                    logger.error(`Error initializing ${this}:`, error);
+                }
             }
         });
     }
@@ -62,8 +68,12 @@ export abstract class BehaviorBacking {
      * Initiated via {@link Construction#start} by Behaviors class once the backing is installed.
      */
     [Construction.construct](agent: Agent) {
+        let crashError: undefined | BehaviorInitializationError;
         const crash = (cause: unknown) => {
-            throw new BehaviorInitializationError(`Error initializing ${this}`, cause);
+            if (!crashError) {
+                crashError = new BehaviorInitializationError(`Error initializing ${this}`, cause);
+            }
+            throw crashError;
         };
 
         try {
@@ -166,6 +176,7 @@ export abstract class BehaviorBacking {
             defaults: this.#endpoint.behaviors.defaultsFor(this.type),
             store: this.store,
             owner: this.#endpoint,
+            cluster: this.type.schema?.tag === "cluster" ? (this.type.schema.id as ClusterId) : undefined,
         };
     }
 
@@ -208,6 +219,11 @@ export abstract class BehaviorBacking {
     get stateView() {
         return this.#datasource?.view ?? {};
     }
+
+    /**
+     * Supported elements.
+     */
+    abstract readonly elements: SupportedElements | undefined;
 
     /**
      * Install a reactor.

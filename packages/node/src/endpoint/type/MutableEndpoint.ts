@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -74,6 +74,10 @@ export function MutableEndpoint<const T extends EndpointType.Options>(options: T
                 ...options,
                 behaviors: SupportedBehaviors.extend(this.behaviors, behaviors),
             });
+        },
+
+        withBehaviors(this: MutableEndpoint, ...behaviors: Behavior.Type[]) {
+            return this.with(...behaviors);
         },
     } as unknown as MutableEndpoint.With<
         EndpointType.For<T>,

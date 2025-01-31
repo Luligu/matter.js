@@ -1,9 +1,10 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { FieldValue } from "@matter/model";
 import { LocalMatter } from "../local.js";
 
 LocalMatter.children.push({
@@ -18,6 +19,12 @@ LocalMatter.children.push({
             tag: "datatype",
             name: "OccupancyBitmap",
             type: "OccupancySensing.OccupancyBitmap",
+        },
+        {
+            tag: "attribute",
+            id: 0x1b,
+            name: "ControlSequenceOfOperation",
+            default: FieldValue.None,
         },
     ],
 });

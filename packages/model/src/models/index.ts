@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -19,6 +19,7 @@ export * from "./Model.js";
 export * from "./NodeModel.js";
 export * from "./PropertyModel.js";
 export * from "./RequirementModel.js";
+export * from "./ScopeModel.js";
 export * from "./SemanticNamespaceModel.js";
 export * from "./SemanticTagModel.js";
 export * from "./ValueModel.js";

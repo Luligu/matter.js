@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -117,7 +117,7 @@ const MAX_CURRENT_LEVEL = 0xfe;
  * data ranges.
  */
 export class ColorControlServerLogic extends ColorControlServerBase {
-    protected declare internal: ColorControlServerLogic.Internal;
+    declare protected internal: ColorControlServerLogic.Internal;
     declare state: ColorControlServerLogic.State;
 
     /*
@@ -1491,6 +1491,10 @@ export class ColorControlServerLogic extends ColorControlServerBase {
         MaybePromise.then(this.stopAllColorMovement(), () => {
             switch (oldMode) {
                 case ColorControl.ColorMode.CurrentHueAndCurrentSaturation:
+                    if (this.state.currentHue === undefined || this.state.currentSaturation === undefined) {
+                        logger.warn("Could not convert from hue/saturation because one of them is undefined");
+                        break;
+                    }
                     switch (newMode) {
                         case ColorControl.ColorMode.CurrentXAndCurrentY:
                             // Convert hue/saturation to xy
@@ -1512,6 +1516,10 @@ export class ColorControlServerLogic extends ColorControlServerBase {
                     }
                     break;
                 case ColorControl.ColorMode.CurrentXAndCurrentY:
+                    if (this.state.currentX === undefined || this.state.currentY === undefined) {
+                        logger.warn("Could not convert from xy because one of them is undefined");
+                        break;
+                    }
                     switch (newMode) {
                         case ColorControl.ColorMode.CurrentHueAndCurrentSaturation:
                             // Convert xy to hue/saturation
@@ -1531,6 +1539,10 @@ export class ColorControlServerLogic extends ColorControlServerBase {
                     }
                     break;
                 case ColorControl.ColorMode.ColorTemperatureMireds:
+                    if (this.state.colorTemperatureMireds === undefined) {
+                        logger.warn("Could not convert from color temperature because it is undefined");
+                        break;
+                    }
                     switch (newMode) {
                         case ColorControl.ColorMode.CurrentHueAndCurrentSaturation:
                             // Convert color temperature to hue/saturation

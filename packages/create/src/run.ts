@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -15,7 +15,7 @@ export function run(command: string, args?: string[], options?: SpawnOptions) {
                 ...options,
             });
         } catch (e) {
-            reject(e);
+            reject(e as Error);
             return;
         }
 

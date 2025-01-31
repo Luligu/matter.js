@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -20,6 +20,7 @@ import { PeerAddress } from "#peer/PeerAddress.js";
 import { CaseAuthenticatedTag, FabricIndex, NodeId, StatusCode, StatusResponseError } from "#types";
 import { DecodedMessage, DecodedPacket, Message, MessageCodec, Packet } from "../codec/MessageCodec.js";
 import { Fabric } from "../fabric/Fabric.js";
+import { NoChannelError } from "../protocol/ChannelManager.js";
 import { MessageCounter } from "../protocol/MessageCounter.js";
 import { MessageReceptionStateEncryptedWithoutRollover } from "../protocol/MessageReceptionState.js";
 import { Session, SessionParameterOptions } from "./Session.js";
@@ -41,6 +42,7 @@ export class SecureSession extends Session {
     #closingAfterExchangeFinished = false;
     #sendCloseMessageWhenClosing = true;
     readonly #id: number;
+    readonly #isInitiator: boolean;
     #fabric: Fabric | undefined;
     readonly #peerNodeId: NodeId;
     readonly #peerSessionId: number;
@@ -135,6 +137,7 @@ export class SecureSession extends Session {
             encryptKey,
             attestationKey,
             caseAuthenticatedTags,
+            isInitiator,
         } = args;
 
         this.#id = id;
@@ -145,6 +148,7 @@ export class SecureSession extends Session {
         this.#encryptKey = encryptKey;
         this.#attestationKey = attestationKey;
         this.#caseAuthenticatedTags = caseAuthenticatedTags ?? [];
+        this.#isInitiator = isInitiator;
 
         manager?.sessions.add(this);
         fabric?.addSession(this);
@@ -152,16 +156,23 @@ export class SecureSession extends Session {
         logger.debug(
             `Created secure ${this.isPase ? "PASE" : "CASE"} session for fabric index ${fabric?.fabricIndex}`,
             this.name,
-            Diagnostic.dict({
-                idleIntervalMs: this.idleIntervalMs,
-                activeIntervalMs: this.activeIntervalMs,
-                activeThresholdMs: this.activeThresholdMs,
-                dataModelRevision: this.dataModelRevision,
-                interactionModelRevision: this.interactionModelRevision,
-                specificationVersion: this.specificationVersion,
-                maxPathsPerInvoke: this.maxPathsPerInvoke,
-                caseAuthenticatedTags: this.#caseAuthenticatedTags,
-            }),
+            this.parameterDiagnostics(),
+        );
+    }
+
+    parameterDiagnostics() {
+        return Diagnostic.dict(
+            {
+                SII: this.idleIntervalMs,
+                SAI: this.activeIntervalMs,
+                SAT: this.activeThresholdMs,
+                DMRev: this.dataModelRevision,
+                IMRev: this.interactionModelRevision,
+                spec: Diagnostic.hex(this.specificationVersion),
+                maxPaths: this.maxPathsPerInvoke,
+                CATs: this.#caseAuthenticatedTags,
+            },
+            true,
         );
     }
 
@@ -187,6 +198,10 @@ export class SecureSession extends Session {
 
     get subscriptions() {
         return this.#subscriptions;
+    }
+
+    get isInitiator() {
+        return this.#isInitiator;
     }
 
     get isClosing() {
@@ -306,9 +321,13 @@ export class SecureSession extends Session {
             logger.info(`End ${this.isPase ? "PASE" : "CASE"} session ${this.name}`);
             this.manager?.sessions.delete(this);
 
-            // Wait for the exchange to finish closing
+            // Wait for the exchange to finish closing, but ignore errors if channel is already closed
             if (this.closer) {
-                await this.closer;
+                try {
+                    await this.closer;
+                } catch (error) {
+                    NoChannelError.accept(error);
+                }
             }
         }
     }

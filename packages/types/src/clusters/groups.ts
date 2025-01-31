@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -44,7 +44,14 @@ export namespace Groups {
      *
      * @see {@link MatterSpecification.v13.Cluster} § 1.3.6.1
      */
-    export const NameSupportAttribute = { nameSupport: BitFlag(7) };
+    export const NameSupportAttribute = {
+        nameSupport: BitFlag(7),
+
+        /**
+         * The ability to store a name for a group.
+         */
+        groupNames: BitFlag(7)
+    };
 
     /**
      * Input to the Groups addGroup command

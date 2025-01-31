@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -78,12 +78,10 @@ export class ClientStoreFactory extends ClientStoreService {
             store.construction.start();
         }
 
-        const results = await Promise.allSettled(Object.values(this.#stores).map(store => store.construction.ready));
-        const errors = results.filter(result => result.status === "rejected").map(result => result.reason);
-
-        if (errors.length) {
-            throw new MatterAggregateError(errors, "Error loading one or more client stores");
-        }
+        await MatterAggregateError.allSettled(
+            Object.values(this.#stores).map(store => store.construction.ready),
+            "Error while initializing client stores",
+        );
     }
 
     allocateId() {

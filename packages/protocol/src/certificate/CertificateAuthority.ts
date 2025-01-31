@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -38,8 +38,8 @@ const logger = Logger.get("CertificateAuthority");
 export class CertificateAuthority {
     private rootCertId = BigInt(0);
     private rootKeyPair = Crypto.createKeyPair();
-    private rootKeyIdentifier = Crypto.hash(this.rootKeyPair.publicKey).slice(0, 20);
-    private rootCertBytes = this.#generateRootCert();
+    private rootKeyIdentifier: Uint8Array<ArrayBufferLike> = Crypto.hash(this.rootKeyPair.publicKey).slice(0, 20);
+    private rootCertBytes: Uint8Array<ArrayBufferLike> = this.#generateRootCert();
     private nextCertificateId = BigInt(1);
     #construction: Construction<CertificateAuthority>;
 
@@ -68,11 +68,11 @@ export class CertificateAuthority {
                 this.rootKeyIdentifier = certValues.rootKeyIdentifier;
                 this.rootCertBytes = certValues.rootCertBytes;
                 this.nextCertificateId = BigInt(certValues.nextCertificateId);
-                logger.debug(`Loaded stored credentials with ID ${this.rootCertId}`);
+                logger.info(`Loaded stored credentials with ID ${this.rootCertId}`);
                 return;
             }
 
-            logger.debug(`Created new credentials with ID ${this.rootCertId}`);
+            logger.info(`Created new credentials with ID ${this.rootCertId}`);
 
             if (options instanceof StorageContext) {
                 await options.set({

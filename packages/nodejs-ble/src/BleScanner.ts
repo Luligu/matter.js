@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -95,33 +95,42 @@ export class BleScanner implements Scanner {
     }
 
     private handleDiscoveredDevice(peripheral: Peripheral, manufacturerServiceData: Uint8Array) {
+        const address = peripheral.address;
         logger.debug(
-            `Discovered device ${peripheral.address} ${manufacturerServiceData === undefined ? undefined : Bytes.toHex(manufacturerServiceData)}`,
+            `Discovered device ${address} ${manufacturerServiceData === undefined ? undefined : Bytes.toHex(manufacturerServiceData)}`,
         );
 
         try {
             const { discriminator, vendorId, productId, hasAdditionalAdvertisementData } =
                 BtpCodec.decodeBleAdvertisementServiceData(manufacturerServiceData);
 
-            const commissionableDevice: CommissionableDeviceData = {
-                deviceIdentifier: peripheral.address,
+            const deviceData: CommissionableDeviceData = {
+                deviceIdentifier: address,
                 D: discriminator,
                 SD: (discriminator >> 8) & 0x0f,
                 VP: `${vendorId}+${productId}`,
                 CM: 1, // Can be no other mode,
-                addresses: [{ type: "ble", peripheralAddress: peripheral.address }],
+                addresses: [{ type: "ble", peripheralAddress: address }],
             };
-            logger.debug(`Discovered device ${peripheral.address} data: ${Logger.toJSON(commissionableDevice)}`);
+            const deviceExisting = this.discoveredMatterDevices.has(address);
 
-            const deviceExisting = this.discoveredMatterDevices.has(peripheral.address);
+            logger.debug(
+                `${deviceExisting ? "Re-" : ""}Discovered device ${address} data: ${Logger.toJSON(deviceData)}`,
+            );
 
-            this.discoveredMatterDevices.set(peripheral.address, {
-                deviceData: commissionableDevice,
-                peripheral: peripheral,
+            if (deviceExisting) {
+                // Device got rediscovered, so clear the state
+                // TODO: Remove once noble does that by itself
+                peripheral.state = "disconnected";
+            }
+
+            this.discoveredMatterDevices.set(address, {
+                deviceData,
+                peripheral,
                 hasAdditionalAdvertisementData,
             });
 
-            const queryKey = this.findCommissionableQueryIdentifier(commissionableDevice);
+            const queryKey = this.findCommissionableQueryIdentifier(deviceData);
             if (queryKey !== undefined) {
                 this.finishWaiter(queryKey, true, deviceExisting);
             }
@@ -223,8 +232,16 @@ export class BleScanner implements Scanner {
     async findCommissionableDevices(
         identifier: CommissionableDeviceIdentifiers,
         timeoutSeconds = 10,
+        ignoreExistingRecords = false,
     ): Promise<CommissionableDevice[]> {
         let storedRecords = this.getCommissionableDevices(identifier);
+        if (ignoreExistingRecords) {
+            // We want to have a fresh discovery result, so clear out the stored records because they might be outdated
+            for (const record of storedRecords) {
+                this.discoveredMatterDevices.delete(record.peripheral.address);
+            }
+            storedRecords = [];
+        }
         if (storedRecords.length === 0) {
             const queryKey = this.buildCommissionableQueryIdentifier(identifier);
 
@@ -288,8 +305,8 @@ export class BleScanner implements Scanner {
         return this.getCommissionableDevices(identifier).map(({ deviceData }) => deviceData);
     }
 
-    close(): void {
-        void this.nobleClient.stopScanning();
+    async close() {
+        await this.nobleClient.stopScanning();
         [...this.recordWaiters.keys()].forEach(queryId =>
             this.finishWaiter(queryId, !!this.recordWaiters.get(queryId)?.timer),
         );

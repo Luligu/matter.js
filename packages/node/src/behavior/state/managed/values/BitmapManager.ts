@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -32,7 +32,7 @@ interface Wrapper extends Val.Struct, Internal.Collection {
 /**
  * For bitmaps we generate a class with accessors for each bitmap value or range.
  */
-export function BitmapManager(_owner: RootSupervisor, schema: Schema): ValueSupervisor.Manage {
+export function BitmapManager(owner: RootSupervisor, schema: Schema): ValueSupervisor.Manage {
     const instanceDescriptors = {} as PropertyDescriptorMap;
 
     const byteSize = (schema as ValueModel).metabase?.byteSize;
@@ -41,11 +41,7 @@ export function BitmapManager(_owner: RootSupervisor, schema: Schema): ValueSupe
     }
     const maxBit = byteSize * 8;
 
-    for (const member of schema.activeMembers) {
-        if (member.isDeprecated) {
-            continue;
-        }
-
+    for (const member of owner.membersOf(schema)) {
         let name;
         if (schema.id === FeatureMap.id) {
             // We require special casing for feature maps because the spec code uses "feature" field from spec as name

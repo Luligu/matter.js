@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -45,7 +45,7 @@ import { PeerAddressStore, PeerDataStore } from "./PeerAddressStore.js";
 const logger = Logger.get("PeerSet");
 
 const RECONNECTION_POLLING_INTERVAL_MS = 600_000; // 10 minutes
-const RETRANSMISSION_DISCOVERY_TIMEOUT_MS = 5_000;
+const RETRANSMISSION_DISCOVERY_TIMEOUT_S = 5;
 
 const CONCURRENT_QUEUED_INTERACTIONS = 4;
 const INTERACTION_QUEUE_DELAY_MS = 100;
@@ -82,7 +82,8 @@ export interface DiscoveryOptions {
 interface RunningDiscovery {
     type: NodeDiscoveryType;
     promises?: (() => Promise<MessageChannel>)[];
-    timer?: Timer;
+    stopTimerFunc?: (() => void) | undefined;
+    mdnsScanner?: MdnsScanner;
 }
 
 /**
@@ -326,14 +327,9 @@ export class PeerSet implements ImmutableSet<OperationalPeer>, ObservableSet<Ope
     /**
      * Terminate any active peer connection.
      */
-    async disconnect(peer: PeerAddress | OperationalPeer) {
-        const address = this.get(peer)?.address;
-        if (address === undefined) {
-            return;
-        }
-
+    async disconnect(address: PeerAddress, sendSessionClose = true) {
         this.#clients.get(address)?.removeAllSubscriptions();
-        await this.#sessions.removeAllSessionsForNode(address, true);
+        await this.#sessions.removeAllSessionsForNode(address, sendSessionClose);
         await this.#channels.removeAllNodeChannels(address);
     }
 
@@ -350,15 +346,14 @@ export class PeerSet implements ImmutableSet<OperationalPeer>, ObservableSet<Ope
         logger.info(`Removing ${address}`);
         this.#peers.delete(actual);
         await this.#store.deletePeer(address);
-        await this.disconnect(actual);
+        await this.disconnect(address, false);
         await this.#sessions.deleteResumptionRecord(address);
         this.#clients.delete(address);
     }
 
     async close() {
-        const mdnsScanner = this.#scanners.scannerFor(ChannelType.UDP) as MdnsScanner | undefined;
-        for (const [address, { timer }] of this.#runningPeerDiscoveries.entries()) {
-            timer?.stop();
+        for (const [address, { stopTimerFunc, mdnsScanner }] of this.#runningPeerDiscoveries.entries()) {
+            stopTimerFunc?.();
 
             // This ends discovery without triggering promises
             mdnsScanner?.cancelOperationalDeviceDiscovery(this.#sessions.fabricFor(address), address.nodeId, false);
@@ -469,21 +464,26 @@ export class PeerSet implements ImmutableSet<OperationalPeer>, ObservableSet<Ope
 
         const discoveryPromises = new Array<() => Promise<MessageChannel>>();
         let reconnectionPollingTimer: Timer | undefined;
+        let stopTimerFunc: (() => void) | undefined;
 
-        if (operationalAddress !== undefined) {
+        const lastOperationalAddress = this.#getLastOperationalAddress(address);
+        if (lastOperationalAddress !== undefined) {
             // Additionally to general discovery we also try to poll the formerly known operational address
             if (requestedDiscoveryType === NodeDiscoveryType.FullDiscovery) {
                 const { promise, resolver, rejecter } = createPromise<MessageChannel>();
 
+                logger.debug(
+                    `Starting reconnection polling for ${serverAddressToString(lastOperationalAddress)} (Interval ${RECONNECTION_POLLING_INTERVAL_MS / 1000}s)`,
+                );
                 reconnectionPollingTimer = Time.getPeriodicTimer(
                     "Controller reconnect",
                     RECONNECTION_POLLING_INTERVAL_MS,
                     async () => {
                         try {
-                            logger.debug(`Polling for device at ${serverAddressToString(operationalAddress)} ...`);
+                            logger.debug(`Polling for device at ${serverAddressToString(lastOperationalAddress)} ...`);
                             const result = await this.#reconnectKnownAddress(
                                 address,
-                                operationalAddress,
+                                lastOperationalAddress,
                                 discoveryData,
                             );
                             if (result !== undefined && reconnectionPollingTimer?.isRunning) {
@@ -509,6 +509,11 @@ export class PeerSet implements ImmutableSet<OperationalPeer>, ObservableSet<Ope
                     },
                 ).start();
 
+                stopTimerFunc = () => {
+                    reconnectionPollingTimer?.stop();
+                    reconnectionPollingTimer = undefined;
+                    rejecter(new NoResponseTimeoutError("Reconnection polling cancelled"));
+                };
                 discoveryPromises.push(() => promise);
             }
         }
@@ -521,8 +526,8 @@ export class PeerSet implements ImmutableSet<OperationalPeer>, ObservableSet<Ope
                 timeoutSeconds,
                 timeoutSeconds === undefined,
             );
-            const { timer } = this.#runningPeerDiscoveries.get(address) ?? {};
-            timer?.stop();
+            const { stopTimerFunc } = this.#runningPeerDiscoveries.get(address) ?? {};
+            stopTimerFunc?.();
             this.#runningPeerDiscoveries.delete(address);
 
             const { result } = await ControllerDiscovery.iterateServerAddresses(
@@ -551,10 +556,13 @@ export class PeerSet implements ImmutableSet<OperationalPeer>, ObservableSet<Ope
         this.#runningPeerDiscoveries.set(address, {
             type: requestedDiscoveryType,
             promises: discoveryPromises,
-            timer: reconnectionPollingTimer,
+            stopTimerFunc,
+            mdnsScanner,
         });
 
-        return await anyPromise(discoveryPromises).finally(() => this.#runningPeerDiscoveries.delete(address));
+        return await anyPromise(discoveryPromises).finally(() => {
+            this.#runningPeerDiscoveries.delete(address);
+        });
     }
 
     async #reconnectKnownAddress(
@@ -713,6 +721,16 @@ export class PeerSet implements ImmutableSet<OperationalPeer>, ObservableSet<Ope
             };
         }
         await this.#store.updatePeer(peer);
+
+        // If we got a new channel and have a running discovery we can end it
+        if (this.#runningPeerDiscoveries.has(address)) {
+            logger.info(`Found ${address} during discovery, cancel discovery.`);
+            // We are currently discovering this node, so we need to update the discovery data
+            const { mdnsScanner } = this.#runningPeerDiscoveries.get(address) ?? {};
+
+            // This ends discovery and triggers the promises
+            mdnsScanner?.cancelOperationalDeviceDiscovery(this.#sessions.fabricFor(address), address.nodeId, true);
+        }
     }
 
     #getLastOperationalAddress(address: PeerAddress) {
@@ -736,7 +754,7 @@ export class PeerSet implements ImmutableSet<OperationalPeer>, ObservableSet<Ope
         this.#runningPeerDiscoveries.set(address, { type: NodeDiscoveryType.RetransmissionDiscovery });
         this.#scanners
             .scannerFor(ChannelType.UDP)
-            ?.findOperationalDevice(fabric, nodeId, RETRANSMISSION_DISCOVERY_TIMEOUT_MS, true)
+            ?.findOperationalDevice(fabric, nodeId, RETRANSMISSION_DISCOVERY_TIMEOUT_S, true)
             .catch(error => {
                 logger.error(`Failed to discover ${address} after resubmission started.`, error);
             })

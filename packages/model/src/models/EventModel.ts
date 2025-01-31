@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -20,6 +20,10 @@ export class EventModel extends ValueModel<EventElement> implements EventElement
 
     get fabricSensitive(): boolean {
         return this.effectiveAccess.fabricSensitive;
+    }
+
+    override get requiredFields() {
+        return { ...super.requiredFields, id: this.id };
     }
 
     static {

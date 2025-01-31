@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -12,4 +12,4 @@ console.log("Start AllClustersApp-Legacy");
 console.log(process.pid);
 console.log(process.argv);
 
-startTestApp("AllClustersApp-Legacy", AllClustersTestInstanceLegacy).catch(console.error);
+startTestApp(AllClustersTestInstanceLegacy).catch(console.error);

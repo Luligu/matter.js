@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -22,6 +22,7 @@ import { Specification } from "@matter/model";
 import { CommissioningController, CommissioningServer, MatterServer } from "@project-chip/matter.js";
 import { AttestationCertificateManager, CertificationDeclarationManager } from "@project-chip/matter.js/certificate";
 import {
+    AccessControl,
     AdministratorCommissioning,
     BasicInformation,
     ClusterServer,
@@ -141,6 +142,7 @@ describe("Integration Test", () => {
             caseAuthenticatedTags: [CaseAuthenticatedTag(0x12345678), CaseAuthenticatedTag(0x56781234)],
             subscribeMinIntervalFloorSeconds: 0,
             subscribeMaxIntervalCeilingSeconds: 60,
+            adminFabricLabel: "Controller1",
         });
         await matterClient.addCommissioningController(commissioningController);
 
@@ -321,8 +323,9 @@ describe("Integration Test", () => {
             };
 
             assert.deepEqual(commissioningController.getCommissionedNodes(), [nodeId]);
-            assert.equal(commissioningChangedCallsServer.length, 1);
+            assert.equal(commissioningChangedCallsServer.length, 2);
             assert.equal(commissioningChangedCallsServer[0].fabricIndex, FabricIndex(1));
+            assert.equal(commissioningChangedCallsServer[1].fabricIndex, FabricIndex(1)); // label set
             assert.equal(sessionChangedCallsServer.length, 1);
             assert.equal(sessionChangedCallsServer[0].fabricIndex, FabricIndex(1));
             const sessionInfo = commissioningServer.getActiveSessionInformation();
@@ -343,7 +346,7 @@ describe("Integration Test", () => {
 
             await commissioningController.connectNode(nodeId);
 
-            assert.equal(commissioningChangedCallsServer.length, 1);
+            assert.equal(commissioningChangedCallsServer.length, 2);
             assert.equal(sessionChangedCallsServer.length, 1);
             assert.equal(sessionChangedCallsServer[0].fabricIndex, FabricIndex(1));
             const sessionInfo = commissioningServer.getActiveSessionInformation();
@@ -364,7 +367,7 @@ describe("Integration Test", () => {
             assert.equal(Array.isArray(data.attributeReports), true);
             assert.equal(Array.isArray(data.eventReports), true);
 
-            assert.equal(commissioningChangedCallsServer.length, 1);
+            assert.equal(commissioningChangedCallsServer.length, 2);
             assert.equal(sessionChangedCallsServer.length, 2);
             assert.equal(sessionChangedCallsServer[1].fabricIndex, FabricIndex(1));
             const sessionInfo = commissioningServer.getActiveSessionInformation();
@@ -411,7 +414,7 @@ describe("Integration Test", () => {
                     { timedRequestTimeoutMs: 1 },
                 );
                 await assert.rejects(async () => await promise, {
-                    message: "(148) Received error status: 148", // Timeout expired
+                    message: "(148) Received error status: 148 (InvokeResponse)", // Timeout expired
                 });
             });
 
@@ -429,7 +432,7 @@ describe("Integration Test", () => {
                 );
                 const promise = onoffCluster.toggle(undefined, { timedRequestTimeoutMs: 1 });
                 await assert.rejects(async () => await promise, {
-                    message: "(148) Received error status: 148", // Timeout expired
+                    message: "(148) Received error status: 148 (InvokeResponse)", // Timeout expired
                 });
             });
 
@@ -922,7 +925,7 @@ describe("Integration Test", () => {
 
             assert.deepEqual(lastReport, { value: false, time: startTime + (10 + 2) * 1000 + 200 });
 
-            assert.equal(commissioningChangedCallsServer.length, 1);
+            assert.equal(commissioningChangedCallsServer.length, 2);
             assert.equal(sessionChangedCallsServer.length, 3);
             assert.equal(sessionChangedCallsServer[2].fabricIndex, FabricIndex(1));
             const sessionInfo = commissioningServer.getActiveSessionInformation();
@@ -965,25 +968,35 @@ describe("Integration Test", () => {
 
             const { promise: updatePromise, resolver: updateResolver } = createPromise<void>();
 
+            let resolved = false;
             await onOffClient.subscribeOnOffAttribute(
                 value => {
+                    console.trace("onOffClient.subscribeOnOffAttribute", value);
                     pushedUpdates.push({ value, time: Time.nowMs() });
-                    updateResolver();
+                    if (!resolved) updateResolver();
+                    resolved = true;
                 },
                 0,
                 5,
                 dataVersion,
             );
 
+            await MockTime.advance(2 * 1000);
+
             assert.deepEqual(pushedUpdates, []);
 
-            await MockTime.advance(2 * 1000);
             onOffLightDeviceServer.setOnOff(true);
+
             await MockTime.advance(100);
 
             await updatePromise;
 
-            assert.deepEqual(pushedUpdates, [{ value: true, time: startTime + 2 * 1000 + 100 }]);
+            // We might get multiple same values triggered because we use a direct AttributeClient here
+            // and PairedNode might retrigger those event correctly on the Client objects for legacy reasons
+            assert.equal(pushedUpdates.length > 0, true);
+            pushedUpdates.forEach(update =>
+                assert.deepEqual(update, { value: true, time: startTime + 2 * 1000 + 100 }),
+            );
         });
 
         /*
@@ -1145,7 +1158,7 @@ describe("Integration Test", () => {
         });
 
         it("Check callback info", async () => {
-            assert.equal(commissioningChangedCallsServer.length, 1);
+            assert.equal(commissioningChangedCallsServer.length, 2);
             assert.ok(sessionChangedCallsServer.length >= 6); // not 100% accurate because of MockTime and not 100% finished responses and stuff like that
             assert.equal(sessionChangedCallsServer[sessionChangedCallsServer.length - 1].fabricIndex, FabricIndex(1));
             const sessionInfo = commissioningServer.getActiveSessionInformation();
@@ -1186,6 +1199,7 @@ describe("Integration Test", () => {
             assert.equal(typeof firstFabric, "object");
             assert.equal(firstFabric.fabricIndex, 1);
             assert.equal(firstFabric.fabricId, 1);
+            assert.equal(firstFabric.label, "Controller1");
 
             const groupsClusterEndpointMap = firstFabric.scopedClusterData?.get(Groups.Cluster.id);
             assert.ok(groupsClusterEndpointMap);
@@ -1290,6 +1304,7 @@ describe("Integration Test", () => {
             assert.ok(typeof storedControllerFabric === "object");
             assert.equal(storedControllerFabric.fabricId, FabricId(1));
             assert.equal(storedControllerFabric.fabricIndex, FabricIndex(1));
+            assert.equal(storedControllerFabric.label, "Controller1");
         });
     });
 
@@ -1378,7 +1393,7 @@ describe("Integration Test", () => {
             assert.deepEqual(commissioningController.getCommissionedNodes(), [...existingNodes, nodeId]);
 
             assert.equal(commissioningServer2CertificateProviderCalled, true);
-            assert.equal(commissioningChangedCallsServer2.length, 1);
+            assert.equal(commissioningChangedCallsServer2.length, 2);
             assert.equal(sessionChangedCallsServer2.length, 1);
             assert.equal(sessionChangedCallsServer2[0].fabricIndex, FabricIndex(1));
             const sessionInfo = commissioningServer2.getActiveSessionInformation();
@@ -1398,7 +1413,7 @@ describe("Integration Test", () => {
 
             await commissioningController.connectNode(nodeId);
 
-            assert.equal(commissioningChangedCallsServer2.length, 1);
+            assert.equal(commissioningChangedCallsServer2.length, 2);
             assert.equal(sessionChangedCallsServer2.length, 1);
             assert.equal(sessionChangedCallsServer2[0].fabricIndex, FabricIndex(1));
             const sessionInfo = commissioningServer2.getActiveSessionInformation();
@@ -1419,7 +1434,7 @@ describe("Integration Test", () => {
             assert.equal(Array.isArray(data.attributeReports), true);
             assert.equal(Array.isArray(data.eventReports), true);
 
-            assert.equal(commissioningChangedCallsServer2.length, 1);
+            assert.equal(commissioningChangedCallsServer2.length, 2);
             assert.equal(sessionChangedCallsServer2.length, 2);
             assert.equal(sessionChangedCallsServer2[0].fabricIndex, FabricIndex(1));
             const sessionInfo = commissioningServer2.getActiveSessionInformation();
@@ -1652,8 +1667,8 @@ describe("Integration Test", () => {
                     }),
             ); // We cannot check the real exception because text is dynamic
 
-            assert.equal(commissioningChangedCallsServer2.length, 1);
-            assert.equal(commissioningChangedCallsServer.length, 1);
+            assert.equal(commissioningChangedCallsServer2.length, 2);
+            assert.equal(commissioningChangedCallsServer.length, 2);
         });
 
         it("connect this device to a new controller", async () => {
@@ -1668,6 +1683,7 @@ describe("Integration Test", () => {
                 adminVendorId: VendorId(0x1234),
                 subscribeMinIntervalFloorSeconds: 0,
                 subscribeMaxIntervalCeilingSeconds: 60,
+                adminFabricLabel: "Controller2",
             });
             await matterClient.addCommissioningController(commissioningController2, {
                 uniqueStorageKey: "another-second",
@@ -1694,14 +1710,14 @@ describe("Integration Test", () => {
                     }),
             );
 
-            assert.equal(commissioningChangedCallsServer.length, 2);
+            assert.equal(commissioningChangedCallsServer.length, 4);
             assert.ok(sessionChangedCallsServer.length >= 7);
             assert.equal(sessionChangedCallsServer[sessionChangedCallsServer.length - 1].fabricIndex, FabricIndex(2));
             const sessionInfo = commissioningServer.getActiveSessionInformation();
             assert.equal(sessionInfo.length, 2);
             assert.ok(sessionInfo[1].fabric);
             assert.equal(sessionInfo[1].numberOfActiveSubscriptions, 0);
-            assert.equal(commissioningChangedCallsServer2.length, 1);
+            assert.equal(commissioningChangedCallsServer2.length, 2);
 
             assert.equal(nodeStateChangesController2Node1.length, 2);
             assert.equal(nodeStateChangesController2Node1[0].nodeState, NodeStateInformation.Reconnecting);
@@ -1716,11 +1732,13 @@ describe("Integration Test", () => {
             assert.equal(typeof firstFabric, "object");
             assert.equal(firstFabric.fabricIndex, 1);
             assert.equal(firstFabric.fabricId, 1);
+            assert.equal(firstFabric.label, "Controller1");
             const secondFabric = storedFabrics[1] as FabricJsonObject;
             assert.equal(typeof secondFabric, "object");
             assert.equal(secondFabric.fabricIndex, 2);
             assert.equal(secondFabric.fabricId, 1000);
             assert.equal(secondFabric.rootVendorId, 0x1234);
+            assert.equal(secondFabric.label, "Controller2");
 
             assert.equal(fakeServerStorage.get(["0", "FabricManager"], "nextFabricIndex"), 3);
 
@@ -1911,6 +1929,11 @@ describe("Integration Test", () => {
                     },
                 },
                 discoveryData: {
+                    ICD: 0,
+                    SAI: 300,
+                    SAT: 4000,
+                    SII: 500,
+                    T: 0,
                     addresses: [
                         {
                             ip: SERVER_IPv6,
@@ -1932,6 +1955,7 @@ describe("Integration Test", () => {
             );
             assert.ok(typeof storedControllerFabrics === "object");
             assert.equal(storedControllerFabrics.fabricIndex, FabricIndex(1001));
+            assert.equal(storedControllerFabrics.label, "Controller2");
         });
 
         after(() => {
@@ -2021,6 +2045,29 @@ describe("Integration Test", () => {
                 },
             ]);
         });
+
+        it("write list attribute", async () => {
+            const nodeId = commissioningController2.getCommissionedNodes()[0];
+            const node = commissioningController2.getPairedNode(nodeId);
+            assert.ok(node);
+            const accessControl = node.getRootClusterClient(AccessControl.Cluster);
+            assert.ok(accessControl);
+            const acl = await accessControl.getAclAttribute(true, true);
+            assert.equal(Array.isArray(acl), true);
+            assert.equal(acl.length, 1);
+            assert.ok(acl[0].subjects);
+            acl.push({
+                ...acl[0],
+                subjects: [NodeId(BigInt(acl[0].subjects[0]) + BigInt(11111111))], // Just a non existing dummy subject
+            });
+
+            await accessControl.setAclAttribute(acl);
+
+            const acl2 = await accessControl.getAclAttribute(true, true);
+            assert.equal(Array.isArray(acl2), true);
+            assert.equal(acl2.length, 2);
+            assert.deepEqual(acl2, acl);
+        });
     });
 
     describe("remove one Fabric", () => {
@@ -2047,9 +2094,9 @@ describe("Integration Test", () => {
             assert.equal(commissioningController.getCommissionedNodes().length, 1);
             assert.equal(commissioningController.getCommissionedNodes()[0], secondNodeId);
 
-            assert.equal(commissioningChangedCallsServer.length, 3);
-            assert.equal(commissioningChangedCallsServer[2].fabricIndex, FabricIndex(1));
-            assert.equal(commissioningChangedCallsServer2.length, 1);
+            assert.equal(commissioningChangedCallsServer.length, 5);
+            assert.equal(commissioningChangedCallsServer[4].fabricIndex, FabricIndex(1));
+            assert.equal(commissioningChangedCallsServer2.length, 2);
 
             assert.equal(nodeStateChangesController1Node1.length, 4);
             assert.equal(nodeStateChangesController1Node1[2].nodeState, NodeStateInformation.Disconnected);
@@ -2078,14 +2125,14 @@ describe("Integration Test", () => {
 
             let i;
             for (i = 0; i < 20; i++) {
-                if (commissioningChangedCallsServer2.length === 1) {
+                if (commissioningChangedCallsServer2.length === 2) {
                     await new Promise(resolve => setTimeout(resolve, 1000));
                 } else {
                     break;
                 }
             }
             assert.ok(i !== 0);
-            assert.equal(commissioningChangedCallsServer2.length, 2);
+            assert.equal(commissioningChangedCallsServer2.length, 3);
 
             assert.equal(commissioningController.getCommissionedNodes().length, 1);
 
@@ -2097,7 +2144,7 @@ describe("Integration Test", () => {
             Time.get = () => mockTimeInstance;
 
             assert.equal(commissioningController.getCommissionedNodes().length, 0);
-            assert.equal(commissioningChangedCallsServer2.length, 2);
+            assert.equal(commissioningChangedCallsServer2.length, 3);
             assert.equal(commissioningChangedCallsServer2[1].fabricIndex, FabricIndex(1));
 
             assert.equal(nodeStateChangesController1Node2.length, 4);
@@ -2134,8 +2181,8 @@ describe("Integration Test", () => {
 
         await matterServer.close();
         await matterClient.close();
-        fakeControllerStorage.close();
-        fakeServerStorage.close();
+        await fakeControllerStorage.close();
+        await fakeServerStorage.close();
 
         Time.get = () => mockTimeInstance;
 

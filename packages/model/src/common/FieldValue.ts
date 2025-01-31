@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -23,7 +23,33 @@ export type FieldValue =
     | FieldValue.Reference
     | FieldValue.Percent
     | FieldValue.Celsius
-    | FieldValue.Bytes;
+    | FieldValue.Bytes
+    | FieldValue.None;
+
+/**
+ * Create a FieldValue (or undefined) from a naked JavaScript value.
+ *
+ * Assumes that objects and arrays already contain valid FieldValues.
+ */
+export function FieldValue(value: unknown): FieldValue | undefined {
+    if (typeof value === "function") {
+        throw new UnexpectedDataError("Cannot cast function to FieldValue");
+    }
+
+    if (typeof value === "object" && value !== null) {
+        if (Array.isArray(value)) {
+            return value as FieldValue[];
+        }
+
+        if (value instanceof Date) {
+            return value;
+        }
+
+        return value as FieldValue.Properties;
+    }
+
+    return value as FieldValue;
+}
 
 export namespace FieldValue {
     // Typing with constants should be just as type safe as using an enum but simplifies type definitions
@@ -43,15 +69,23 @@ export namespace FieldValue {
     export const bytes = "bytes";
     export type bytes = typeof bytes;
 
+    export const none = "none";
+    export type none = typeof none;
+
+    /**
+     * A field value that allows type extension.
+     */
+    export type Open = FieldValue | { type: string };
+
     /**
      * If a field value isn't a primitive type, it's an object with a type field indicating one of these types.
      */
-    export type Type = percent | celsius | reference | properties | bytes;
+    export type Type = percent | celsius | reference | properties | bytes | none;
 
     /**
      * Test for one of the special placeholder types.
      */
-    export function is(value: FieldValue | undefined, type: Type) {
+    export function is(value: Open | undefined, type: Type) {
         return value && (value as any).type === type;
     }
 
@@ -61,6 +95,17 @@ export namespace FieldValue {
      */
     export const Invalid: unique symbol = Symbol("invalid");
     export type Invalid = typeof Invalid;
+
+    /**
+     * Flag for an "Undefined"/No value. Can be used in overrides to reset fields
+     */
+    export type None = {
+        type: none;
+    };
+
+    export const None: None = {
+        type: none,
+    };
 
     /**
      * Reference to a named field
@@ -125,6 +170,9 @@ export namespace FieldValue {
         if (value === null) {
             return "null";
         }
+        if (is(value, none)) {
+            return "";
+        }
         if (is(value, reference)) {
             return (value as Reference).name;
         }
@@ -132,7 +180,7 @@ export namespace FieldValue {
             return `${(value as Celsius).value}°C`;
         }
         if (is(value, percent)) {
-            return `${(value as Percent).value}%';`;
+            return `${(value as Percent).value}%`;
         }
         if (is(value, properties)) {
             return stringSerialize((value as Properties).properties) ?? "?";
@@ -143,7 +191,7 @@ export namespace FieldValue {
     /**
      * Given a type name as a hint, do our best to convert a field value to a number.
      */
-    export function numericValue(value: FieldValue | undefined, typeName?: string) {
+    export function numericValue(value: Open | undefined, typeName?: string) {
         if (typeof value === "boolean") {
             return value ? 1 : 0;
         }
@@ -204,6 +252,9 @@ export namespace FieldValue {
                 // This needs to be handled at a higher level
                 return;
 
+            case "none":
+                return; // undefined
+
             case "percent":
             case "celsius":
                 return numericValue(value, typeName);
@@ -219,7 +270,7 @@ export namespace FieldValue {
     /**
      * Get the referenced name if the FieldValue is a reference.
      */
-    export function referenced(value: FieldValue | undefined) {
+    export function referenced(value: Open | undefined) {
         if (is(value, reference)) {
             return (value as Reference).name;
         }
@@ -233,7 +284,7 @@ export namespace FieldValue {
      *
      * @returns the cast value or FieldValue.Invalid if cast is not possible
      */
-    export function cast(type: Metatype, value: any): FieldValue | FieldValue.Invalid | undefined {
+    export function cast<const T extends Metatype>(type: T, value: any): FieldValue | FieldValue.Invalid | undefined {
         if (value === undefined || value === null || type === "any") {
             return value;
         }

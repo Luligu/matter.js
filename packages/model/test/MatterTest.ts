@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -22,7 +22,7 @@ describe("MatterDefinition", () => {
 
     it("has not increased in errors", () => {
         validate().report();
-        expect(validationResult?.errors.length).most(16);
+        expect(validationResult?.errors.length).most(2);
     });
 
     it("has not decreased in scope", () => {

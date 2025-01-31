@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -11,6 +11,7 @@ import {
     Environmental,
     ImplementationError,
     Logger,
+    MatterAggregateError,
     MatterError,
     MatterFlowError,
     NotImplementedError,
@@ -27,7 +28,7 @@ import { SecureSession } from "../session/SecureSession.js";
 import { Session } from "../session/Session.js";
 import { SessionManager, UNICAST_UNSECURE_SESSION_ID } from "../session/SessionManager.js";
 import { ChannelManager } from "./ChannelManager.js";
-import { MessageExchange, MessageExchangeContext } from "./MessageExchange.js";
+import { ExchangeLogContext, MessageExchange, MessageExchangeContext } from "./MessageExchange.js";
 import { DuplicateMessageError } from "./MessageReceptionState.js";
 import { ProtocolHandler } from "./ProtocolHandler.js";
 
@@ -70,8 +71,8 @@ export class MessageChannel implements Channel<Message> {
         return this.channel.maxPayloadSize;
     }
 
-    send(message: Message): Promise<void> {
-        logger.debug("Message »", MessageCodec.messageDiagnostics(message));
+    send(message: Message, logContext?: ExchangeLogContext): Promise<void> {
+        logger.debug("Message »", MessageCodec.messageDiagnostics(message, logContext));
         const packet = this.session.encode(message);
         const bytes = MessageCodec.encodePacket(packet);
         if (bytes.length > this.maxPayloadSize) {
@@ -181,10 +182,13 @@ export class ExchangeManager {
         for (const listeners of this.#listeners.keys()) {
             this.#deleteListener(listeners);
         }
-        await Promise.allSettled(this.#closers);
-        for (const exchange of this.#exchanges.values()) {
-            await exchange.destroy();
-        }
+        await MatterAggregateError.allSettled(this.#closers, "Error closing exchanges").catch(error =>
+            logger.error(error),
+        );
+        await MatterAggregateError.allSettled(
+            Array.from(this.#exchanges.values()).map(exchange => exchange.close(true)),
+            "Error closing exchanges",
+        ).catch(error => logger.error(error));
         this.#exchanges.clear();
     }
 
@@ -349,8 +353,8 @@ export class ExchangeManager {
             logger.debug(`Channel for session ${session.name} is ${channel?.name}`);
             if (channel !== undefined) {
                 const exchange = this.initiateExchangeWithChannel(channel, SECURE_CHANNEL_PROTOCOL_ID);
-                logger.debug(`Initiated exchange ${!!exchange} to close session ${sessionName}`);
                 if (exchange !== undefined) {
+                    logger.debug(`Initiated exchange ${exchange.id} to close session ${sessionName}`);
                     try {
                         const messenger = new SecureChannelMessenger(exchange);
                         await messenger.sendCloseSession();

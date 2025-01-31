@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -503,14 +503,14 @@ export class InteractionServer implements ProtocolHandler, InteractionRecipient 
                         );
                         const { schema } = event;
                         reportsForPath.push(
-                            ...matchingEvents.map(({ eventNumber, priority, epochTimestamp, data }) => ({
+                            ...matchingEvents.map(({ number, priority, epochTimestamp, payload }) => ({
                                 hasFabricSensitiveData: event.hasFabricSensitiveData,
                                 eventData: {
                                     path,
-                                    eventNumber,
+                                    eventNumber: number,
                                     priority,
                                     epochTimestamp,
-                                    payload: data,
+                                    payload,
                                     schema,
                                 },
                             })),
@@ -659,7 +659,7 @@ export class InteractionServer implements ProtocolHandler, InteractionRecipient 
         const clusterDataVersionInfo = new Map<string, number>();
         const inaccessiblePaths = new Set<string>();
 
-        // TODO Add handling for moreChunkedMessages here when adopting for Matter 1.3
+        // TODO Add handling for moreChunkedMessages here when adopting for Matter 1.4
 
         for (const writeRequest of writeData) {
             const { path: writePath, dataVersion } = writeRequest;
@@ -771,7 +771,7 @@ export class InteractionServer implements ProtocolHandler, InteractionRecipient 
                         listIndex === undefined
                             ? decodeAttributeValueWithSchema(schema, [writeRequest], defaultValue)
                             : decodeListAttributeValueWithSchema(
-                                  schema,
+                                  schema as ArraySchema<any>,
                                   [writeRequest],
                                   (
                                       await this.readAttribute(
@@ -955,10 +955,16 @@ export class InteractionServer implements ProtocolHandler, InteractionRecipient 
             );
 
         if (!keepSubscriptions) {
-            logger.debug(
-                `Clear subscriptions for Subscriber node ${session.peerNodeId} because keepSubscriptions=false`,
+            const clearedCount = await this.#context.sessions.clearSubscriptionsForNode(
+                fabric.fabricIndex,
+                session.peerNodeId,
+                true,
             );
-            await this.#context.sessions.clearSubscriptionsForNode(fabric.fabricIndex, session.peerNodeId, true);
+            if (clearedCount > 0) {
+                logger.debug(
+                    `Cleared ${clearedCount} subscriptions for Subscriber node ${session.peerNodeId} because keepSubscriptions=false`,
+                );
+            }
         }
 
         if (
@@ -1072,7 +1078,11 @@ export class InteractionServer implements ProtocolHandler, InteractionRecipient 
             await subscription.close(); // Cleanup
             if (error instanceof StatusResponseError) {
                 logger.info(`Sending status response ${error.code} for interaction error: ${error.message}`);
-                await messenger.sendStatus(error.code);
+                await messenger.sendStatus(error.code, {
+                    logContext: {
+                        for: "I/SubscriptionSeed-Status",
+                    },
+                });
             }
             await messenger.close();
             return; // Make sure to not bubble up the exception
@@ -1092,6 +1102,12 @@ export class InteractionServer implements ProtocolHandler, InteractionRecipient 
                 maxInterval,
                 interactionModelRevision: Specification.INTERACTION_MODEL_REVISION,
             }),
+            {
+                logContext: {
+                    subId: subscriptionId,
+                    maxInterval,
+                },
+            },
         );
 
         // When an error occurs while sending the response, the subscription is not yet active and will be cleaned up by GC
@@ -1152,23 +1168,39 @@ export class InteractionServer implements ProtocolHandler, InteractionRecipient 
         // Validate all commandPaths before proceeding to make sure not to have executed partial commands
         invokeRequests.forEach(({ commandPath }) => validateCommandPath(commandPath));
 
+        // Perform additional cross-command validation required for batch invoke
         if (invokeRequests.length > 1) {
-            const invokeUniqueSet = new Set<string>();
-            invokeRequests.forEach(({ commandPath }) => {
+            const pathsUsed = new Set<string>();
+            const commandRefsUsed = new Set<number>();
+            invokeRequests.forEach(({ commandPath, commandRef }) => {
                 if (!isConcreteCommandPath(commandPath)) {
-                    throw new StatusResponseError(
-                        "Wildcard paths are not supported in multi-command invoke requests",
-                        StatusCode.InvalidAction,
-                    );
+                    throw new StatusResponseError("Illegal wildcard path in batch invoke", StatusCode.InvalidAction);
                 }
+
                 const commandPathId = commandPathToId(commandPath);
-                if (invokeUniqueSet.has(commandPathId)) {
+                if (pathsUsed.has(commandPathId)) {
                     throw new StatusResponseError(
-                        `Duplicate command paths (${commandPathId}) are not allowed in multi-command invoke requests`,
+                        `Duplicate command path (${commandPathId}) in batch invoke`,
                         StatusCode.InvalidAction,
                     );
                 }
-                invokeUniqueSet.add(commandPathId);
+
+                if (commandRef === undefined) {
+                    throw new StatusResponseError(
+                        `Command reference missing in batch invoke of ${commandPathId}`,
+                        StatusCode.InvalidAction,
+                    );
+                }
+
+                if (commandRefsUsed.has(commandRef)) {
+                    throw new StatusResponseError(
+                        `Duplicate command reference ${commandRef} in invoke of ${commandPathId}`,
+                        StatusCode.InvalidAction,
+                    );
+                }
+
+                pathsUsed.add(commandPathId);
+                commandRefsUsed.add(commandRef);
             });
         }
 
@@ -1214,12 +1246,21 @@ export class InteractionServer implements ProtocolHandler, InteractionRecipient 
                             `Send ${lastMessageProcessed ? "final " : ""}invoke response for ${invokeResponseMessage.invokeResponses} commands`,
                         );
                     }
+                    const moreChunkedMessages = lastMessageProcessed ? undefined : true;
                     await messenger.send(
                         MessageType.InvokeResponse,
                         TlvInvokeResponseForSend.encode({
                             ...invokeResponseMessage,
-                            moreChunkedMessages: invokeResultsProcessed < invokeRequests.length ? true : undefined,
+                            moreChunkedMessages,
                         }),
+                        {
+                            logContext: {
+                                invokeMsgFlags: Diagnostic.asFlags({
+                                    suppressResponse,
+                                    moreChunkedMessages,
+                                }),
+                            },
+                        },
                     );
                     invokeResponseMessage.invokeResponses = [];
                     messageSize = emptyInvokeResponseBytes.length;

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -87,6 +87,9 @@ export function ClusterClient<const T extends ClusterType>(
         result[`add${capitalizedAttributeName}AttributeListener`] = <T>(listener: (value: T) => void) => {
             (attributes as any)[attributeName].addListener(listener);
         };
+        result[`remove${capitalizedAttributeName}AttributeListener`] = <T>(listener: (value: T) => void) => {
+            (attributes as any)[attributeName].removeListener(listener);
+        };
     }
 
     function addEventToResult(event: Event<any, any>, eventName: string) {
@@ -125,6 +128,9 @@ export function ClusterClient<const T extends ClusterType>(
         };
         result[`add${capitalizedEventName}EventListener`] = <T>(listener: (value: DecodedEventData<T>) => void) => {
             (events as any)[eventName].addListener(listener);
+        };
+        result[`remove${capitalizedEventName}EventListener`] = <T>(listener: (value: DecodedEventData<T>) => void) => {
+            (events as any)[eventName].removeListener(listener);
         };
     }
 

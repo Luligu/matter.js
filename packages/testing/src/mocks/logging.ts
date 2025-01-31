@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -22,7 +22,7 @@ export const TheMockLogger: MockLogger = {
 };
 
 function formatExternalMessage(source: string, text: string) {
-    return `    ${colors.bgCyan.black.bold(` ${source} `)} ${colors.dim(text)}`;
+    return `${colors.bgCyan.black.bold(` ${source} `)} ${colors.dim(text)}`;
 }
 
 /**

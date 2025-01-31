@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 import "@matter/nodejs";
@@ -12,4 +12,4 @@ console.log("Start BridgeApp");
 console.log(process.pid);
 console.log(process.argv);
 
-startTestApp("BridgeApp", BridgeTestInstance).catch(console.error);
+startTestApp(BridgeTestInstance).catch(console.error);

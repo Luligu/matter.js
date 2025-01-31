@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -12,9 +12,9 @@ import { OfflineContext } from "#behavior/context/server/OfflineContext.js";
 import { OnlineContext } from "#behavior/context/server/OnlineContext.js";
 import { AccessControlCluster } from "#clusters/access-control";
 import { Endpoint } from "#endpoint/Endpoint.js";
-import { EndpointServer } from "#endpoint/EndpointServer.js";
 import { EndpointLifecycle } from "#endpoint/properties/EndpointLifecycle.js";
-import { Diagnostic, InternalError, MaybePromise } from "#general";
+import { EndpointServer } from "#endpoint/server/EndpointServer.js";
+import { Diagnostic, InternalError, Logger, MaybePromise } from "#general";
 import {
     AccessDeniedError,
     AnyAttributeServer,
@@ -25,7 +25,6 @@ import {
     CommandServer,
     EndpointInterface,
     EventPath,
-    EventStorageData,
     ExchangeManager,
     InteractionContext,
     InteractionEndpointStructure,
@@ -33,6 +32,7 @@ import {
     InteractionServerMessenger,
     Message,
     MessageExchange,
+    NumberedOccurrence,
     SessionManager,
     WriteRequest,
     WriteResponse,
@@ -40,6 +40,8 @@ import {
 import { TlvEventFilter, TypeFromSchema } from "#types";
 import { AccessControlServer } from "../../behaviors/access-control/AccessControlServer.js";
 import { ServerNode } from "../ServerNode.js";
+
+const logger = Logger.get("TransactionalInteractionServer");
 
 const activityKey = Symbol("activity");
 
@@ -64,12 +66,12 @@ const AclAttributeId = AccessControlCluster.attributes.acl.id;
  */
 export class TransactionalInteractionServer extends InteractionServer {
     #endpointStructure: InteractionEndpointStructure;
-    #changeListener: (type: EndpointLifecycle.Change) => void;
+    #changeListener: (type: EndpointLifecycle.Change, endpoint: Endpoint) => void;
     #endpoint: Endpoint<ServerNode.RootEndpoint>;
     #activity: NodeActivity;
     #newActivityBlocked = false;
     #aclServer?: AccessControlServer;
-    #aclUpdateIsDelayed = false;
+    #aclUpdateIsDelayedInExchange = new Set<MessageExchange>();
 
     static async create(endpoint: Endpoint<ServerNode.RootEndpoint>, sessions: SessionManager) {
         const structure = new InteractionEndpointStructure();
@@ -96,11 +98,15 @@ export class TransactionalInteractionServer extends InteractionServer {
 
         // TODO - rewrite element lookup so we don't need to build the secondary endpoint structure cache
         this.#updateStructure();
-        this.#changeListener = type => {
+        this.#changeListener = (type, endpoint) => {
             switch (type) {
+                case EndpointLifecycle.Change.ServersChanged:
+                    EndpointServer.forEndpoint(endpoint).updateServers();
+                    this.#updateStructure();
+                    break;
+
                 case EndpointLifecycle.Change.PartsReady:
                 case EndpointLifecycle.Change.ClientsChanged:
-                case EndpointLifecycle.Change.ServersChanged:
                 case EndpointLifecycle.Change.Destroyed:
                     this.#updateStructure();
                     break;
@@ -114,6 +120,7 @@ export class TransactionalInteractionServer extends InteractionServer {
         this.#endpoint.lifecycle.changed.off(this.#changeListener);
         await this.close();
         this.#endpointStructure.close();
+        await EndpointServer.forEndpoint(this.#endpoint)[Symbol.asyncDispose]();
     }
 
     blockNewActivity() {
@@ -185,7 +192,7 @@ export class TransactionalInteractionServer extends InteractionServer {
         fabricFiltered: boolean,
         message: Message,
         endpoint: EndpointInterface,
-    ): Promise<EventStorageData<any>[]> {
+    ): Promise<NumberedOccurrence[]> {
         const readEvent = (context: ActionContext) => {
             if (!context.authorizedFor(event.readAcl, { cluster: path.clusterId } as AccessControl.Location)) {
                 throw new AccessDeniedError(
@@ -212,13 +219,36 @@ export class TransactionalInteractionServer extends InteractionServer {
         writeRequest: WriteRequest,
         message: Message,
     ): Promise<WriteResponse> {
-        const result = await super.handleWriteRequest(exchange, writeRequest, message);
+        let result: WriteResponse;
+        try {
+            result = await super.handleWriteRequest(exchange, writeRequest, message);
+        } catch (error) {
+            if (this.#aclUpdateIsDelayedInExchange.has(exchange)) {
+                // Unlikely to get there at all, but make sure we handle it best we can for now
+                this.#aclUpdateIsDelayedInExchange.delete(exchange);
 
-        // We delayed the ACL update during the write transaction, so we need to update it now that anything is written
-        if (this.#aclUpdateIsDelayed) {
-            this.aclServer.aclUpdateDelayed = false;
-            this.#aclUpdateIsDelayed = false;
+                if (this.#aclUpdateIsDelayedInExchange.size === 0) {
+                    // only that one ACl change in flight, so we can reset the delayed ACL
+                    this.aclServer.resetDelayedAccessControlList();
+                } else {
+                    // TODO: we should restore the delayed data just for this errored fabric?
+                    logger.error("One of multiple concurrent ACL writes failed, unhandled case for now.");
+                }
+            }
+            throw error;
         }
+        // We delayed the ACL update during this write transaction, so we need to update it now that anything is written
+        if (this.#aclUpdateIsDelayedInExchange.has(exchange)) {
+            this.#aclUpdateIsDelayedInExchange.delete(exchange);
+
+            if (this.#aclUpdateIsDelayedInExchange.size === 0) {
+                //  Committing the ACL changes in case of an unhandled exception might be dangerous, but we do it anyway
+                this.aclServer.aclUpdateDelayed = false;
+            } else {
+                logger.info("Multiple concurrent ACL writes, waiting for all to finish.");
+            }
+        }
+
         return result;
     }
 
@@ -239,11 +269,18 @@ export class TransactionalInteractionServer extends InteractionServer {
             // This is a hack to prevent the ACL from updating while we are in the middle of a write transaction
             // and is needed because Acl should not become effective during writing of the ACL itself.
             this.aclServer.aclUpdateDelayed = true;
-            this.#aclUpdateIsDelayed = true;
-        } else if (this.#aclUpdateIsDelayed) {
+            this.#aclUpdateIsDelayedInExchange.add(exchange);
+        } else {
             // Ok it seems that acl was written, but we now write another path, so we can update Acl attribute now
-            this.aclServer.aclUpdateDelayed = false;
-            this.#aclUpdateIsDelayed = false;
+            if (this.#aclUpdateIsDelayedInExchange.has(exchange)) {
+                this.#aclUpdateIsDelayedInExchange.delete(exchange);
+
+                if (this.#aclUpdateIsDelayedInExchange.size === 0) {
+                    this.aclServer.aclUpdateDelayed = false;
+                } else {
+                    logger.info("Multiple concurrent ACL writes, waiting for all to finish.");
+                }
+            }
         }
 
         return OnlineContext({
@@ -298,7 +335,8 @@ export class TransactionalInteractionServer extends InteractionServer {
 
     #updateStructure() {
         if (this.#endpoint.lifecycle.isPartsReady) {
-            this.#endpointStructure.initializeFromEndpoint(EndpointServer.forEndpoint(this.#endpoint));
+            const server = EndpointServer.forEndpoint(this.#endpoint);
+            this.#endpointStructure.initializeFromEndpoint(server);
         }
     }
 }

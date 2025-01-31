@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -9,7 +9,7 @@
 
 import Chai from "chai";
 import ChaiAsPromised from "chai-as-promised";
-import { browserSetup, generalSetup } from "./mocha.js";
+import { browserSetup, extendApi, generalSetup } from "./mocha.js";
 import { bootSetup } from "./mocks/boot.js";
 import { cryptoSetup } from "./mocks/crypto.js";
 import { TheMockLogger, loggerSetup } from "./mocks/logging.js";
@@ -31,7 +31,8 @@ Object.assign(globalThis, {
     MockLogger: TheMockLogger,
 });
 
-if (typeof window === "object" && globalThis === window) {
+if (globalThis === (globalThis as any).window) {
+    extendApi(Mocha);
     generalSetup(mocha);
     browserSetup(mocha);
 }

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -34,6 +34,10 @@ export class AttributeModel extends PropertyModel<AttributeElement> implements A
 
     get changesOmitted() {
         return this.effectiveQuality.changesOmitted;
+    }
+
+    override get requiredFields() {
+        return { ...super.requiredFields, id: this.id };
     }
 
     constructor(definition: AttributeElement.Properties) {

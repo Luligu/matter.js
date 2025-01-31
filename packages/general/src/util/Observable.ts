@@ -1,12 +1,13 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import { ImplementationError } from "../MatterError.js";
 import { Logger } from "../log/Logger.js";
 import "../polyfills/disposable.js";
+import { asError } from "./Error.js";
 import { MaybePromise } from "./Promises.js";
 
 const logger = Logger.get("Observable");
@@ -184,11 +185,7 @@ export class BasicObservable<T extends any[] = any[], R = void> implements Obser
                 try {
                     result = observer(...payload);
                 } catch (e) {
-                    if (e instanceof Error) {
-                        this.#errorHandler(e, observer);
-                    } else {
-                        this.#errorHandler(new Error(`${e}`), observer);
-                    }
+                    this.#errorHandler(asError(e), observer);
                 }
 
                 if (this.#once?.has(observer)) {
@@ -251,8 +248,8 @@ export class BasicObservable<T extends any[] = any[], R = void> implements Obser
     }
 
     then<TResult1 = T, TResult2 = never>(
-        onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | undefined | null,
-        onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null,
+        onfulfilled?: ((value: T) => TResult1 | PromiseLike<TResult1>) | null,
+        onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | null,
     ): PromiseLike<TResult1 | TResult2> {
         return new Promise<T>(resolve => {
             this.once((...payload): undefined => {
@@ -468,8 +465,8 @@ export class ObservableProxy extends BasicObservable {
  */
 export class ObserverGroup {
     #defaultTarget?: {};
-    #observers = new Map<Observable<any[]> | AsyncObservable<any>, Observer<any[]>[]>();
-    #boundObservers = new Map<Observer<any[]>, Map<{}, Observer<any[]>>>();
+    #observers = new Map<Observable<any[], any> | AsyncObservable<any>, Observer<any[], any>[]>();
+    #boundObservers = new Map<Observer<any[], any>, Map<{}, Observer<any[]>>>();
 
     constructor(target?: {}) {
         this.#defaultTarget = target;
@@ -482,15 +479,15 @@ export class ObserverGroup {
      * @param observer the observer function
      * @param target optional "this" to bind the observer
      */
-    on<T extends any[]>(
-        observable: Observable<T> | AsyncObservable<T>,
-        observer: Observer<NoInfer<T>>,
+    on<T extends any[], R>(
+        observable: Observable<T, R> | AsyncObservable<T, R>,
+        observer: Observer<ObserverGroup.VarArgs<NoInfer<T>>, NoInfer<R>>,
         target = this.#defaultTarget,
     ) {
         if (target !== undefined) {
             observer = observer.bind(target);
         }
-        observable.on(observer);
+        observable.on(observer as Observer<T, R>);
         const observers = this.#observers.get(observable);
         if (observers === undefined) {
             this.#observers.set(observable, [observer]);
@@ -547,4 +544,12 @@ export class ObserverGroup {
         this.#observers.clear();
         this.#boundObservers.clear();
     }
+}
+
+export namespace ObserverGroup {
+    /**
+     * This is a workaround for a TS bug, without this the observer must provide a full argument set even if it does not
+     * use all arguments.
+     */
+    export type VarArgs<T extends any[]> = T extends [...infer R, infer A] ? [...R, A] : T extends [infer A] ? A : [];
 }

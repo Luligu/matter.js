@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -53,6 +53,11 @@ export interface Children<T extends Model = Model> extends Array<T> {
      * Like {@link select} but retrieves all models for which selection applies.
      */
     selectAll(selector: Children.Selector, allowedTags?: Children.TagSelector, except?: Set<Model>): Model.ChildOf<T>[];
+
+    /**
+     * Create a new child or patch existing children.
+     */
+    patchOrPush<C extends Model.Definition<T>>(child: C): void;
 
     /**
      * Models invoke this when their ID changes so we can update internal bookkeeping.
@@ -245,7 +250,7 @@ export function Children<T extends Model = Model>(
     }
 
     /**
-     * Add a child of the model.  Adopts the mdodel and adds to any applicable indices.
+     * Add a child of the model.  Adopts the model and adds to any applicable indices.
      */
     function addChild(child: Model) {
         if ((child.parent?.children as unknown) === children) {
@@ -428,6 +433,21 @@ export function Children<T extends Model = Model>(
         return results;
     }
 
+    function patchOrPush(child: Model.Definition<T>) {
+        validateChild(child);
+
+        const existing = selectAll.call(self, child.name, [child.tag as ElementTag]);
+        if (existing.length) {
+            // Patch
+            for (const toPatch of existing) {
+                toPatch.patch(child);
+            }
+        } else {
+            // Push
+            self.push(child);
+        }
+    }
+
     function updateId(child: Model, oldId: number | undefined) {
         if (!indices) {
             return;
@@ -517,7 +537,7 @@ export function Children<T extends Model = Model>(
 
     const self = new Proxy(children, {
         get: (_target, name, receiver) => {
-            if (typeof name === "string" && name.match(/^[0-9]+$/)) {
+            if (typeof name === "string" && name.match(/^\d+$/)) {
                 let child = children[name as unknown as number];
                 if (child && !(child instanceof Model)) {
                     child = Model.create(child) as T;
@@ -541,6 +561,9 @@ export function Children<T extends Model = Model>(
                 case "selectAll":
                     return selectAll;
 
+                case "patchOrPush":
+                    return patchOrPush;
+
                 case "updateId":
                     return updateId;
 
@@ -561,7 +584,7 @@ export function Children<T extends Model = Model>(
         },
 
         set: (_target, name, value, receiver) => {
-            if (typeof name !== "string" || !name.match(/^[0-9]+$/)) {
+            if (typeof name !== "string" || !name.match(/^\d+$/)) {
                 if (name === "length") {
                     if (value > children.length) {
                         // Do not allow preallocation that would create gaps
@@ -613,10 +636,11 @@ export function Children<T extends Model = Model>(
         deleteProperty: (_target, p) => {
             let child: undefined | Model.Definition<T>;
 
-            if (typeof p === "string" && p.match(/^[0-9]+$/)) {
+            if (typeof p === "string" && p.match(/^\d+$/)) {
                 child = children[p as unknown as number];
             }
 
+            // eslint-disable-next-line @typescript-eslint/no-array-delete
             delete children[p as unknown as number];
 
             // Child may have been added elsewhere in the index so only delete if not still present

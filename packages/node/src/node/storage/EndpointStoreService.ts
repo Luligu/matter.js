@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -41,11 +41,22 @@ export abstract class EndpointStoreService {
      * These stores are cached internally by ID.
      */
     abstract storeForEndpoint(endpoint: Endpoint): EndpointStore;
+
+    /**
+     * Deactivate the store for a single {@link Endpoint}. This puts the endpoint number back into pre-allocated state
+     */
+    abstract deactivateStoreForEndpoint(endpoint: Endpoint): void;
+
+    /**
+     * Erase storage for a single {@link Endpoint}.
+     */
+    abstract eraseStoreForEndpoint(endpoint: Endpoint): Promise<void>;
 }
 
 export class EndpointStoreFactory extends EndpointStoreService {
     #storage: StorageContext;
     #allocatedNumbers = new Set<number>();
+    #preAllocatedNumbers = new Set<number>();
     #construction: Construction<EndpointStoreFactory>;
     #persistedNextNumber?: number;
     #numbersPersisted?: Promise<void>;
@@ -85,7 +96,7 @@ export class EndpointStoreFactory extends EndpointStoreService {
         // endpoints and #nextNumber is somehow invalid
         this.#root.visit(({ number }) => {
             if (number !== undefined) {
-                this.#allocatedNumbers.add(number);
+                this.#preAllocatedNumbers.add(number);
             }
         });
     }
@@ -101,7 +112,8 @@ export class EndpointStoreFactory extends EndpointStoreService {
         this.#construction.start();
 
         this.#allocatedNumbers = new Set();
-        this.#persistedNextNumber = this.#nextNumber = (this.#defaultNextNumber ?? 1) % 0xffff;
+        this.#nextNumber = (this.#defaultNextNumber ?? 1) % 0xffff;
+        this.#persistedNextNumber = undefined;
         this.#root = new EndpointStore(this.#storage, false);
 
         await this.construction;
@@ -140,6 +152,8 @@ export class EndpointStoreFactory extends EndpointStoreService {
                 if (this.#allocatedNumbers.has(knownNumber)) {
                     logger.warn(`Stored number ${knownNumber} is already allocated to another endpoint, ignoring`);
                 } else {
+                    this.#preAllocatedNumbers.delete(knownNumber);
+                    this.#allocatedNumbers.add(knownNumber);
                     endpoint.number = knownNumber;
                     return;
                 }
@@ -147,7 +161,11 @@ export class EndpointStoreFactory extends EndpointStoreService {
 
             const startNumber = this.#nextNumber;
 
-            while (this.#nextNumber < 1 || this.#allocatedNumbers.has(this.#nextNumber)) {
+            while (
+                this.#nextNumber < 1 ||
+                this.#allocatedNumbers.has(this.#nextNumber) ||
+                this.#preAllocatedNumbers.has(this.#nextNumber)
+            ) {
                 this.#nextNumber = (this.#nextNumber + 1) % 0xffff;
                 if (this.#nextNumber === startNumber) {
                     throw new ImplementationError(
@@ -179,6 +197,35 @@ export class EndpointStoreFactory extends EndpointStoreService {
         }
 
         return this.storeForEndpoint(endpoint.owner).childStoreFor(endpoint);
+    }
+
+    deactivateStoreForEndpoint(endpoint: Endpoint) {
+        this.#construction.assert();
+
+        if (endpoint.maybeNumber === 0) {
+            throw new InternalError("Cannot deactivate root node store");
+        }
+
+        if (!this.#allocatedNumbers.has(endpoint.number)) {
+            return;
+        }
+        this.#allocatedNumbers.delete(endpoint.number);
+        this.#preAllocatedNumbers.add(endpoint.number);
+    }
+
+    async eraseStoreForEndpoint(endpoint: Endpoint) {
+        this.#construction.assert();
+
+        if (!endpoint.owner) {
+            throw new InternalError(
+                "Endpoint storage inaccessible because endpoint is not a node and is not owned by another endpoint",
+            );
+        }
+
+        await this.storeForEndpoint(endpoint.owner).eraseChildStoreFor(endpoint);
+
+        this.#allocatedNumbers.delete(endpoint.number);
+        this.#preAllocatedNumbers.delete(endpoint.number);
     }
 
     /**

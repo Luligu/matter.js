@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -32,11 +32,7 @@ export function ValueCaster(schema: Schema, owner: RootSupervisor) {
 
 function StructCaster(schema: ValueModel | ClusterModel, owner: RootSupervisor) {
     const memberConfigs = {} as Record<string, { name: string; cast: ValueSupervisor.Cast }>;
-    for (const member of schema.activeMembers) {
-        if (member.isDeprecated) {
-            continue;
-        }
-
+    for (const member of owner.membersOf(schema)) {
         const config = { name: camelize(member.name), cast: owner.get(member).cast };
 
         // Correct case has priority
@@ -82,5 +78,5 @@ function ListCaster(schema: ValueModel, owner: RootSupervisor) {
     const castToArray = Metatype.cast.array;
     const castEntry = owner.get(entry).cast;
 
-    return (value: any) => castToArray(value).map(castEntry);
+    return (value: any) => castToArray(value)?.map(castEntry);
 }

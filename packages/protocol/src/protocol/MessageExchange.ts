@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -42,12 +42,20 @@ export class UnexpectedMessageError extends MatterError {
     }
 }
 
+export type ExchangeLogContext = Record<string, unknown>;
+
 export type ExchangeSendOptions = {
     /**
      * The response to this send should be an ack only and no StatusResponse or such. If a StatusResponse is returned
      * then this is handled as error.
      */
     expectAckOnly?: boolean;
+
+    /**
+     * If the message is part of a multiple message interaction, this flag indicates that it is not allowed
+     * to establish a new exchange
+     */
+    multipleMessageInteraction?: boolean;
 
     /**
      * Defined an expected processing time by the responder for the message. This is used to calculate the final
@@ -60,6 +68,14 @@ export type ExchangeSendOptions = {
 
     /** Use the provided acknowledge MessageId instead checking the latest to send one */
     includeAcknowledgeMessageId?: number;
+
+    /**
+     * Disables the MRP logic which means that no retransmissions are done and receiving an ack is not awaited.
+     */
+    disableMrpLogic?: boolean;
+
+    /** Additional context information for logging to be included at the beginning of the Message log. */
+    logContext?: ExchangeLogContext;
 };
 
 /**
@@ -208,14 +224,16 @@ export class MessageExchange {
             Diagnostic.dict({
                 channel: channel.name,
                 protocol: this.#protocolId,
-                id: this.#exchangeId,
-                session: session.name,
-                peerSessionId: this.#peerSessionId,
-                "active threshold ms": this.#activeThresholdMs,
-                "active interval ms": this.#activeIntervalMs,
-                "idle interval ms": this.#idleIntervalMs,
-                maxTransmissions: this.#maxTransmissions,
-                useMrp: this.#useMRP,
+                exId: this.#exchangeId,
+                sess: session.name,
+                peerSess: this.#peerSessionId,
+                SAT: this.#activeThresholdMs,
+                SAI: this.#activeIntervalMs,
+                SII: this.#idleIntervalMs,
+                maxTrans: this.#maxTransmissions,
+                exchangeFlags: Diagnostic.asFlags({
+                    MRP: this.#useMRP,
+                }),
             }),
         );
     }
@@ -260,8 +278,8 @@ export class MessageExchange {
         await this.send(SecureMessageType.StandaloneAck, new Uint8Array(0), { includeAcknowledgeMessageId: messageId });
     }
 
-    async onMessageReceived(message: Message, isDuplicate = false) {
-        logger.debug("Message «", MessageCodec.messageDiagnostics(message, isDuplicate));
+    async onMessageReceived(message: Message, duplicate = false) {
+        logger.debug("Message «", MessageCodec.messageDiagnostics(message, { duplicate }));
 
         // Adjust the incoming message when ack was required but this exchange do not use it to skip all relevant logic
         if (message.payloadHeader.requiresAck && !this.#useMRP) {
@@ -283,7 +301,7 @@ export class MessageExchange {
 
         this.session.notifyActivity(true);
 
-        if (isDuplicate) {
+        if (duplicate) {
             // Received a message retransmission but the reply is not ready yet, ignoring
             if (requiresAck) {
                 await this.sendStandaloneAckForMessage(message);
@@ -348,9 +366,11 @@ export class MessageExchange {
 
         const {
             expectAckOnly = false,
+            disableMrpLogic,
             expectedProcessingTimeMs = DEFAULT_EXPECTED_PROCESSING_TIME_MS,
             requiresAck,
             includeAcknowledgeMessageId,
+            logContext,
         } = options ?? {};
         if (!this.#useMRP && includeAcknowledgeMessageId !== undefined) {
             throw new InternalError("Cannot include an acknowledge message ID when MRP is not used");
@@ -403,10 +423,10 @@ export class MessageExchange {
         };
 
         let ackPromise: Promise<Message> | undefined;
-        if (this.#useMRP && message.payloadHeader.requiresAck) {
+        if (this.#useMRP && message.payloadHeader.requiresAck && !disableMrpLogic) {
             this.#sentMessageToAck = message;
             this.#retransmissionTimer = Time.getTimer(
-                "Message retransmission",
+                `Message retransmission ${message.packetHeader.messageId}`,
                 this.#getResubmissionBackOffTime(0),
                 () => this.#retransmitMessage(message, expectedProcessingTimeMs),
             );
@@ -416,7 +436,7 @@ export class MessageExchange {
             this.#sentMessageAckFailure = rejecter;
         }
 
-        await this.channel.send(message);
+        await this.channel.send(message, logContext);
 
         if (ackPromise !== undefined) {
             this.#retransmissionCounter = 0;
@@ -435,30 +455,37 @@ export class MessageExchange {
         }
     }
 
-    nextMessage(expectedProcessingTimeMs?: number) {
+    nextMessage(options?: { expectedProcessingTimeMs?: number; timeoutMs?: number }) {
         let timeout: number;
-        switch (this.channel.type) {
-            case "tcp":
-                // TCP uses 30s timeout according to chip sdk implementation, so do the same
-                timeout = 30_000;
-                break;
-            case "udp":
-                // UDP normally uses MRP, if not we have Group communication which normally have no responses
-                if (!this.#useMRP) {
-                    throw new MatterFlowError("No response expected for this message exchange because UDP and no MRP.");
-                }
-                timeout = this.calculateMaximumPeerResponseTime(expectedProcessingTimeMs);
-                break;
-            case "ble":
-                // chip sdk uses BTP_ACK_TIMEOUT_MS which is wrong in my eyes, so we use static 30s as like TCP here
-                timeout = 30_000;
-                break;
-            default:
-                throw new MatterFlowError(
-                    `Can not calculate expected timeout for unknown channel type: ${this.channel.type}`,
-                );
+        if (options?.timeoutMs !== undefined) {
+            timeout = options.timeoutMs;
+        } else {
+            switch (this.channel.type) {
+                case "tcp":
+                    // TCP uses 30s timeout according to chip sdk implementation, so do the same
+                    timeout = 30_000;
+                    break;
+                case "udp":
+                    // UDP normally uses MRP, if not we have Group communication which normally have no responses
+                    if (!this.#useMRP) {
+                        throw new MatterFlowError(
+                            "No response expected for this message exchange because UDP and no MRP.",
+                        );
+                    }
+                    const { expectedProcessingTimeMs } = options ?? {};
+                    timeout = this.calculateMaximumPeerResponseTime(expectedProcessingTimeMs);
+                    break;
+                case "ble":
+                    // chip sdk uses BTP_ACK_TIMEOUT_MS which is wrong in my eyes, so we use static 30s as like TCP here
+                    timeout = 30_000;
+                    break;
+                default:
+                    throw new MatterFlowError(
+                        `Can not calculate expected timeout for unknown channel type: ${this.channel.type}`,
+                    );
+            }
+            timeout += PEER_RESPONSE_TIME_BUFFER_MS;
         }
-        timeout += PEER_RESPONSE_TIME_BUFFER_MS;
         return this.#messagesQueue.read(timeout);
     }
 
@@ -511,10 +538,10 @@ export class MessageExchange {
                 if (finalWaitTime > 0) {
                     this.#retransmissionCounter--; // We will not resubmit the message again
                     logger.debug(
-                        `Wait additional ${finalWaitTime}ms for processing time and peer resubmissions after all our resubmissions`,
+                        `Message ${message.packetHeader.messageId}: Wait additional ${finalWaitTime}ms for processing time and peer resubmissions after all our resubmissions`,
                     );
                     this.#retransmissionTimer = Time.getTimer(
-                        "Message wait time after resubmissions",
+                        `Message wait time after resubmissions ${message.packetHeader.messageId}`,
                         finalWaitTime,
                         () => this.#retransmitMessage(message),
                     ).start();
@@ -619,8 +646,16 @@ export class MessageExchange {
         return this.#timedInteractionTimer !== undefined && !this.#timedInteractionTimer.isRunning;
     }
 
-    async close() {
-        if (this.#closeTimer !== undefined) return; // close was already called
+    async close(force = false) {
+        if (this.#closeTimer !== undefined) {
+            if (force) {
+                // Force close does not wait any longer
+                this.#closeTimer.stop();
+                return this.#close();
+            }
+            // close was already called, so let retries happen because close not forced
+            return;
+        }
         this.#isClosing = true;
 
         if (this.#receivedMessageToAck !== undefined) {
@@ -632,7 +667,11 @@ export class MessageExchange {
             } catch (error) {
                 logger.error("An error happened when closing the exchange", error);
             }
-        } else if (this.#sentMessageToAck === undefined) {
+            if (force) {
+                // We have sent the Ack, so close here, no retries because close is forced
+                return this.#close();
+            }
+        } else if (this.#sentMessageToAck === undefined || force) {
             // No message left that we need to ack and no sent message left that waits for an ack, close directly
             return this.#close();
         }

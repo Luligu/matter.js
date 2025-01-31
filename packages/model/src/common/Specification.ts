@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -44,7 +44,7 @@ export namespace Specification {
     /**
      * Matter specification version.
      */
-    export type Revision = `${number}.${number}`;
+    export type Revision = `${number}.${number}` | `${number}.${number}.${number}.${number}`;
 
     /**
      * The default specification revision for Matter.js.

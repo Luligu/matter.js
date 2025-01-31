@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -353,6 +353,7 @@ export const OperationalCredentialsClusterHandler = (
             assertSecureSession(session);
 
             // Assert associated fabric is present
+            // eslint-disable-next-line @typescript-eslint/no-unused-expressions
             session.associatedFabric;
 
             const failsafeContext = MatterDevice.of(session).failsafeContext;

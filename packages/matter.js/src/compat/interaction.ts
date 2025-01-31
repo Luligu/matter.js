@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -19,7 +19,6 @@ export {
     decodeUnknownEventValue,
     encodeAttributePayload,
     encodeEventPayload,
-    EventHandler,
     eventPathToId,
     expandPathsInAttributeData,
     genericElementPathToId,
@@ -35,6 +34,7 @@ export {
     normalizeAndDecodeReadEventReport,
     normalizeAttributeData,
     normalizeEventData,
+    OccurrenceManager,
     sortAttributeDataByPath,
     structureReadAttributeDataToClusterObject,
     ServerSubscription as SubscriptionHandler,

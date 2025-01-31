@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -29,6 +29,7 @@ export type Documentation = {
     description?: string;
     details?: string;
     xref?: Specification.CrossReference;
+    isDeprecated?: boolean;
 };
 
 function mapSpec(xref?: Specification.CrossReference) {
@@ -59,6 +60,7 @@ export abstract class Entry {
             this.documentation?.description ||
             this.documentation?.details ||
             this.documentation?.xref ||
+            this.documentation?.isDeprecated ||
             this.docText
         );
     }
@@ -104,6 +106,13 @@ export abstract class Entry {
                 lines.push("");
             }
             lines.push(`@see {@link ${spec}} § ${this.documentation?.xref?.section}`);
+        }
+
+        if (this.documentation?.isDeprecated) {
+            if (lines.length) {
+                lines.push("");
+            }
+            lines.push("@deprecated");
         }
 
         if (lines.length) {
@@ -283,7 +292,7 @@ export class Block extends Entry {
             let m = s.match(/^(\w+):/);
             if (!m) {
                 m = s.match(
-                    /\s*(?:(?:export|public|private|const)\s+)*(?:(?:function|enum|class|interface|const|var|let)\s+)(\w+)/,
+                    /^\s*(?:(?:export|public|private|const)\s+)*(?:function|enum|class|interface|const|var|let)\s+(\w+)/,
                 );
             }
             if (m) {
@@ -399,9 +408,7 @@ export class Block extends Entry {
 
     protected delimiterAfter(entry: Entry, serialized: string): string {
         if (
-            serialized.match(
-                /^(?:\s*(?:\/\*.*\*\/|export|const))*\s*(?:export)?\s*(?:enum|function|namespace|interface|class)/m,
-            )
+            serialized.match(/^\s*(?:\/\*(?!\*\/)\*\/\s*)?(?:export\s*)?(?:enum|function|namespace|interface|class)\s/m)
         ) {
             // Do not delimit functions structures that eslint will complain about
             return "";
@@ -488,7 +495,7 @@ function chooseExpressionLayout(lineLength: number, prefix: string, serializedEn
         const multiline = entry.indexOf("\n") !== -1;
 
         // Any comment or assignment automatically forces verbose layout mode
-        if (entry.match(/(?:\/\*|\/\/| = )/)) {
+        if (entry.match(/\/\*|\/\/| = /)) {
             return ExpressionLayout.Verbose;
         }
 
@@ -731,7 +738,7 @@ export class TsFile extends Block {
         } else if (filename.startsWith("@matter/")) {
             // For @matter/package we assume an alias of "#package"; for "@matter/package/submodule" we assume an
             // alias of "#submodule"
-            return filename.replace(/^@matter\/(?:[^/]+\/)/, "#");
+            return filename.replace(/^@matter\/[^/]+\//, "#");
         } else {
             throw new InternalError(`Absolute import of ${filename} must start with "@matter"`);
         }

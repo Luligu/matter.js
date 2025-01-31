@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -9,6 +9,7 @@ import { ElementTag, FieldValue, Metatype } from "../common/index.js";
 import { Model } from "../models/Model.js";
 import type { ValueModel } from "../models/ValueModel.js";
 import { FeatureMap } from "../standard/elements/FeatureMap.js";
+import { Scope } from "./Scope.js";
 
 /**
  * Obtain a native JS default value for a ValueModel.
@@ -17,13 +18,14 @@ import { FeatureMap } from "../standard/elements/FeatureMap.js";
  * structural issues but generally returns undefined if the model's default value cannot be converted to the correct
  * type.
  *
+ * @param scope the scope in which the model is referenced
  * @param model the model from which the default value is extracted
  * @param ifValid some structs only have partial defaults defined so would be invalid; do not return these
  */
-export function DefaultValue(model: ValueModel, ifValid = false): any {
+export function DefaultValue(scope: Scope, model: ValueModel, ifValid = false): any {
     const value = castValue(model, model.default);
     if (value === undefined) {
-        return buildValue(model, ifValid);
+        return buildValue(scope, model, ifValid);
     }
     return value;
 }
@@ -117,7 +119,7 @@ function castValue(model: ValueModel, modelDefault?: FieldValue): unknown {
 /**
  * When an explicit default value is not present, for some types we generate a default from the structure.
  */
-function buildValue(model: ValueModel, ifValid: boolean) {
+function buildValue(scope: Scope, model: ValueModel, ifValid: boolean) {
     switch (model.effectiveMetatype) {
         case Metatype.array:
             // We don't really build default array values except in the case of non-nullable arrays where zero items is
@@ -133,23 +135,23 @@ function buildValue(model: ValueModel, ifValid: boolean) {
             return;
 
         case Metatype.object:
-            return buildObject(model, ifValid);
+            return buildObject(scope, model, ifValid);
 
         case Metatype.bitmap:
-            return buildBitmap(model);
+            return buildBitmap(scope, model);
     }
 }
 
-function buildObject(model: ValueModel, ifValid: boolean) {
+function buildObject(scope: Scope, model: ValueModel, ifValid: boolean) {
     let result: { [key: string]: any } | undefined;
 
-    for (const child of model.conformantMembers) {
+    for (const child of scope.membersOf(model, { conformance: "conformant" })) {
         const name = camelize(child.name);
         if (result && result[name] !== undefined) {
             continue;
         }
 
-        const value = child.effectiveDefault;
+        const value = DefaultValue(scope, child);
         if (value !== undefined) {
             if (!result) {
                 result = {};
@@ -168,11 +170,11 @@ function buildObject(model: ValueModel, ifValid: boolean) {
     return result;
 }
 
-function buildBitmap(model: ValueModel) {
+function buildBitmap(scope: Scope, model: ValueModel) {
     let result;
     let fieldsDefined = 0;
 
-    for (const m of model.conformantMembers) {
+    for (const m of scope.membersOf(model, { conformance: "conformant" })) {
         const defaultValue = FieldValue.numericValue(m.default);
         if (defaultValue === undefined) {
             continue;
@@ -200,7 +202,7 @@ function buildBitmap(model: ValueModel) {
             maxBit = Math.trunc(Math.log2(defaultValue)) + 1;
         }
 
-        for (let i = 0, mask = 1 << minBit; i < maxBit - minBit; i++, mask << 1) {
+        for (let i = 0, mask = 1 << minBit; i < maxBit - minBit; i++, mask <<= 1) {
             if (fieldsDefined & mask) {
                 continue;
             }
@@ -228,7 +230,7 @@ function decodeBitmap(model: ValueModel, value: number | bigint) {
         }
 
         const definition = model.bitDefinition(bit);
-        if (!definition || definition.isDeprecated) {
+        if (!definition) {
             continue;
         }
 

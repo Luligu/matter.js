@@ -1,10 +1,11 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import { Logger } from "../log/Logger.js";
+import { asError } from "./Error.js";
 
 const logger = Logger.get("Mutex");
 
@@ -30,8 +31,8 @@ export class Mutex implements PromiseLike<unknown> {
      * await.
      */
     then<TResult1 = void, TResult2 = never>(
-        onfulfilled?: ((value: unknown) => TResult1 | PromiseLike<TResult1>) | undefined | null,
-        onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | undefined | null,
+        onfulfilled?: ((value: unknown) => TResult1 | PromiseLike<TResult1>) | null,
+        onrejected?: ((reason: any) => TResult2 | PromiseLike<TResult2>) | null,
     ): PromiseLike<TResult1 | TResult2> {
         return (this.#promise || Promise.resolve()).then(onfulfilled, onrejected);
     }
@@ -63,6 +64,21 @@ export class Mutex implements PromiseLike<unknown> {
                 });
             });
         }
+    }
+
+    /**
+     * Enqueue work with an awaitable result.
+     */
+    produce<T>(task: () => PromiseLike<T>, cancel?: () => void): Promise<T> {
+        return new Promise<T>((resolve, reject) => {
+            this.run(async () => {
+                try {
+                    resolve(await task());
+                } catch (e) {
+                    reject(asError(e));
+                }
+            }, cancel);
+        });
     }
 
     /**

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -10,7 +10,7 @@ import { DatatypeError } from "../../errors.js";
 import { Val } from "../Val.js";
 
 export function assertNumber(value: Val, path: SchemaErrorPath): asserts value is number {
-    if (typeof value === "number") {
+    if (Number.isFinite(value)) {
         return;
     }
     throw new DatatypeError(path, "a number", value);

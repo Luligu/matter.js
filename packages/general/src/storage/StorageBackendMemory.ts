@@ -1,13 +1,14 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { StorageError, SyncStorage } from "./Storage.js";
+import { deepCopy } from "#util/DeepCopy.js";
+import { CloneableStorage, StorageError, SyncStorage } from "./Storage.js";
 import { SupportedStorageTypes } from "./StringifyTools.js";
 
-export class StorageBackendMemory extends SyncStorage {
+export class StorageBackendMemory extends SyncStorage implements CloneableStorage {
     protected isInitialized = false;
 
     constructor(protected store: any = {}) {
@@ -37,7 +38,13 @@ export class StorageBackendMemory extends SyncStorage {
         // nothing else to do
     }
 
-    close() {
+    clone() {
+        const clone = new StorageBackendMemory(deepCopy(this.store));
+        clone.initialize();
+        return clone;
+    }
+
+    async close() {
         this.isInitialized = false;
         // nothing to do
     }

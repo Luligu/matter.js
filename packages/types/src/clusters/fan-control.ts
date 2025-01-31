@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -213,6 +213,9 @@ export namespace FanControl {
          */
         High = 3,
 
+        /**
+         * @deprecated
+         */
         On = 4,
 
         /**
@@ -222,6 +225,8 @@ export namespace FanControl {
 
         /**
          * Fan is using smart mode
+         *
+         * @deprecated
          */
         Smart = 6
     }

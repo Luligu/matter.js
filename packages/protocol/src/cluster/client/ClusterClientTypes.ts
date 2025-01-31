@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 import { Merge } from "#general";
@@ -109,6 +109,10 @@ type ClientAttributeListeners<A extends Attributes> = {
     [P in keyof A as `add${Capitalize<string & P>}AttributeListener`]: (
         listener: (value: AttributeJsType<A[P]>) => void,
     ) => void;
+} & {
+    [P in keyof A as `remove${Capitalize<string & P>}AttributeListener`]: (
+        listener: (value: AttributeJsType<A[P]>) => void,
+    ) => void;
 };
 
 type CommandServers<C extends Commands> = { [P in keyof C]: SignatureFromCommandSpec<C[P]> };
@@ -131,6 +135,10 @@ type ClientEventSubscribers<E extends Events> = {
 };
 type ClientEventListeners<E extends Events> = {
     [P in keyof E as `add${Capitalize<string & P>}EventListener`]: (
+        listener: (value: DecodedEventData<EventType<E[P]>>) => void,
+    ) => void;
+} & {
+    [P in keyof E as `remove${Capitalize<string & P>}EventListener`]: (
         listener: (value: DecodedEventData<EventType<E[P]>>) => void,
     ) => void;
 };

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -128,7 +128,7 @@ export class StorageBackendAsyncJsonFile extends MaybeAsyncStorage {
         }
         await this.storeIt(true);
         this.closed = true;
-        this.store.close();
+        await this.store.close();
     }
 
     override async keys(contexts: string[]) {

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -12,6 +12,7 @@ import {
     Logger,
     MAX_UDP_MESSAGE_SIZE,
     NetworkError,
+    repackErrorAs,
     UdpChannel,
     UdpChannelOptions,
 } from "#general";
@@ -19,7 +20,7 @@ import { RetransmissionLimitReachedError } from "#protocol";
 import * as dgram from "dgram";
 import { NodeJsNetwork } from "./NodeJsNetwork.js";
 
-const logger = Logger.get("UdpChannelNode");
+const logger = Logger.get("NodejsChannel");
 
 function createDgramSocket(host: string | undefined, port: number | undefined, options: dgram.SocketOptions) {
     const socket = dgram.createSocket(options);
@@ -28,7 +29,7 @@ function createDgramSocket(host: string | undefined, port: number | undefined, o
             try {
                 socket.close();
             } catch (error) {
-                logger.debug("Error on closing socket", error);
+                logger.debug("Error closing socket", error);
             }
             reject(error);
         };
@@ -132,18 +133,21 @@ export class NodeJsUdpChannel implements UdpChannel {
 
     async send(host: string, port: number, data: Uint8Array) {
         return new Promise<void>((resolve, reject) => {
-            this.socket.send(data, port, host, error => {
-                if (error !== null) {
-                    const netError =
-                        error instanceof Error && "code" in error && error.code === "EHOSTUNREACH"
-                            ? new RetransmissionLimitReachedError(error.message)
-                            : new NetworkError(error.message);
-                    netError.stack = error.stack;
-                    reject(netError);
-                    return;
-                }
-                resolve();
-            });
+            try {
+                this.socket.send(data, port, host, error => {
+                    if (error !== null) {
+                        const netError =
+                            "code" in error && error.code === "EHOSTUNREACH"
+                                ? repackErrorAs(error, RetransmissionLimitReachedError)
+                                : repackErrorAs(error, NetworkError);
+                        reject(netError);
+                        return;
+                    }
+                    resolve();
+                });
+            } catch (error) {
+                reject(repackErrorAs(error, NetworkError));
+            }
         });
     }
 

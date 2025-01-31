@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -10,6 +10,7 @@ import {
     Environment,
     Environmental,
     Logger,
+    MatterAggregateError,
     MaybePromise,
     Network,
     VariableService,
@@ -22,6 +23,7 @@ const logger = Logger.get("MDNS");
 export class MdnsService {
     #broadcaster?: MdnsBroadcaster;
     #scanner?: MdnsScanner;
+    #env: Environment;
     readonly #construction: Construction<MdnsService>;
     readonly #enableIpv4: boolean;
     readonly limitedToNetInterface?: string;
@@ -31,8 +33,10 @@ export class MdnsService {
     }
 
     constructor(environment: Environment, options?: MdnsService.Options) {
-        environment.set(MdnsService, this);
-        environment.runtime.add(this);
+        this.#env = environment;
+        const rootEnvironment = environment.root;
+        rootEnvironment.set(MdnsService, this);
+        rootEnvironment.runtime.add(this);
 
         const vars = environment.get(VariableService);
         this.#enableIpv4 = vars.boolean("mdns.ipv4") ?? options?.ipv4 ?? true;
@@ -78,6 +82,8 @@ export class MdnsService {
     }
 
     async [Symbol.asyncDispose]() {
+        this.#env.delete(MdnsService, this);
+
         await this.#construction.close(async () => {
             const broadcasterDisposal = MaybePromise.then(this.#broadcaster?.close(), undefined, e =>
                 logger.error("Error disposing of MDNS broadcaster", e),
@@ -87,7 +93,10 @@ export class MdnsService {
                 logger.error("Error disposing of MDNS scanner", e),
             );
 
-            await Promise.all([broadcasterDisposal, scannerDisposal]);
+            await MatterAggregateError.allSettled(
+                [broadcasterDisposal, scannerDisposal],
+                "Error disposing MDNS services",
+            ).catch(error => logger.error(error));
 
             this.#broadcaster = this.#scanner = undefined;
         });

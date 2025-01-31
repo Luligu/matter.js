@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -51,7 +51,7 @@ const LevelControlLogicBase = LevelControlBehavior.with(LevelControl.Feature.OnO
  * All overridable methods except setRemainingTime can be implemented sync or async by returning a Promise.
  */
 export class LevelControlServerLogic extends LevelControlLogicBase {
-    protected declare internal: LevelControlServerLogic.Internal;
+    declare protected internal: LevelControlServerLogic.Internal;
     declare state: LevelControlServerLogic.State;
 
     /** Returns the minimum level, including feature specific fallback value handling. */
@@ -246,10 +246,14 @@ export class LevelControlServerLogic extends LevelControlLogicBase {
         withOnOff: boolean,
         options: TypeFromPartialBitSchema<typeof LevelControl.Options> = {},
     ) {
+        if (rate === 0) {
+            throw new StatusResponseError(`Illegal move rate of 0`, StatusCode.InvalidCommand);
+        }
+
         const effectiveRate = rate ?? this.state.defaultMoveRate ?? null;
         if (!this.state.managedTransitionTimeHandling || effectiveRate === null || effectiveRate === 0) {
             // If null rate is requested and also no default rate is set, we should move as fast as possible, so we set
-            // to min/max value directly. If rate 0 is requested no change on level should be done.
+            // to min/max value directly. If effectiveRate is 0 then defaultMoveRate is and we just ignore the command.
             const level =
                 effectiveRate === 0
                     ? this.currentLevel
@@ -575,16 +579,31 @@ export namespace LevelControlServerLogic {
     }
 
     export declare const ExtensionInterface: {
-        moveToLevelLogic(level: number, transitionTime: number | null, withOnOff: boolean): MaybePromise<void>;
-        moveLogic(moveMode: LevelControl.MoveMode, rate: number | null, withOnOff: boolean): MaybePromise<void>;
+        moveToLevelLogic(
+            level: number,
+            transitionTime: number | null,
+            withOnOff: boolean,
+            options: TypeFromPartialBitSchema<typeof LevelControl.Options>,
+        ): MaybePromise<void>;
+        moveLogic(
+            moveMode: LevelControl.MoveMode,
+            rate: number | null,
+            withOnOff: boolean,
+            options: TypeFromPartialBitSchema<typeof LevelControl.Options>,
+        ): MaybePromise<void>;
         stepLogic(
             stepMode: LevelControl.StepMode,
             stepSize: number,
             transitionTime: number | null,
             withOnOff: boolean,
+            options: TypeFromPartialBitSchema<typeof LevelControl.Options>,
         ): MaybePromise<void>;
-        stopLogic(): MaybePromise<void>;
-        setLevel(level: number, withOnOff: boolean): MaybePromise<void>;
+        stopLogic(options: TypeFromPartialBitSchema<typeof LevelControl.Options>): MaybePromise<void>;
+        setLevel(
+            level: number,
+            withOnOff: boolean,
+            options: TypeFromPartialBitSchema<typeof LevelControl.Options>,
+        ): MaybePromise<void>;
         setRemainingTime(remainingTime: number): void;
         handleOnOffChange(onOff: boolean): void;
     };

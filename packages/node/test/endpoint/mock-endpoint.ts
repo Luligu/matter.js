@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -52,6 +52,7 @@ export class MockEndpoint<T extends EndpointType> extends Endpoint<T> {
 
         if (!("owner" in config)) {
             config.owner = new MockServerNode(MockServerNode.RootEndpoint, {
+                id: "node0",
                 environment: config.environment as Environment | undefined,
             });
         }

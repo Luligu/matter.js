@@ -1,11 +1,13 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import { Bytes, DataReader, DataWriter, Diagnostic, Endian, NotImplementedError, UnexpectedDataError } from "#general";
-import { GroupId, NodeId } from "#types";
+import { ExchangeLogContext } from "#protocol/index.js";
+import { GroupId, INTERACTION_PROTOCOL_ID, NodeId, SECURE_CHANNEL_PROTOCOL_ID, SecureMessageType } from "#types";
+import { MessageType } from "../interaction/InteractionMessenger.js";
 
 export interface PacketHeader {
     sessionId: number;
@@ -84,6 +86,22 @@ const enum SecurityFlag {
     HasMessageExtension = 0b00100000,
 }
 
+function mapProtocolAndMessageType(protocolId: number, messageType: number): { type: string; for?: string } {
+    const msgTypeHex = Diagnostic.hex(messageType);
+    const type = `${Diagnostic.hex(protocolId)}/${msgTypeHex}`;
+    switch (protocolId) {
+        case SECURE_CHANNEL_PROTOCOL_ID: {
+            return { type, for: `SC/${SecureMessageType[messageType] ?? msgTypeHex}` };
+        }
+        case INTERACTION_PROTOCOL_ID: {
+            return { type, for: `I/${MessageType[messageType] ?? msgTypeHex}` };
+        }
+        // TODO Add BDX and UDC once we support it
+        default:
+            return { type };
+    }
+}
+
 export class MessageCodec {
     static decodePacket(data: Uint8Array): DecodedPacket {
         const reader = new DataReader(data, Endian.Little);
@@ -95,7 +113,7 @@ export class MessageCodec {
             messageExtension = reader.readByteArray(extensionLength);
         }
 
-        const applicationPayload = reader.getRemainingBytes();
+        const applicationPayload = reader.remainingBytes;
         return {
             header,
             messageExtension,
@@ -115,7 +133,7 @@ export class MessageCodec {
             packetHeader: header,
             payloadHeader,
             securityExtension,
-            payload: reader.getRemainingBytes(),
+            payload: reader.remainingBytes,
         };
     }
 
@@ -238,16 +256,30 @@ export class MessageCodec {
             payloadHeader: { exchangeId, messageType, protocolId, ackedMessageId, requiresAck },
             payload,
         }: Message,
-        isDuplicate = false,
+        logContext?: ExchangeLogContext,
     ) {
-        return Diagnostic.dict({
-            id: `${sessionId}/${exchangeId}/${messageId}`,
-            type: `${protocolId}/${messageType}`,
-            acked: ackedMessageId,
-            reqAck: requiresAck,
-            duplicate: isDuplicate,
-            payload: payload,
-        });
+        const duplicate = !!logContext?.duplicate;
+        const forInfo = logContext?.for;
+        const log = { ...logContext };
+        delete log.duplicate;
+        delete log.for;
+        const { type, for: forType } = mapProtocolAndMessageType(protocolId, messageType);
+        return Diagnostic.dict(
+            {
+                for: forInfo ?? forType,
+                ...log,
+                msgId: `${sessionId}/${exchangeId}/${messageId}`,
+                type,
+                acked: ackedMessageId,
+                msgFlags: Diagnostic.asFlags({
+                    reqAck: requiresAck,
+                    dup: duplicate,
+                }),
+                size: payload.length ? payload.length : undefined,
+                payload: payload.length ? payload : undefined,
+            },
+            true,
+        );
     }
 
     private static encodePayloadHeader({
@@ -269,7 +301,11 @@ export class MessageCodec {
         writer.writeUInt8(flags);
         writer.writeUInt8(messageType);
         writer.writeUInt16(exchangeId);
-        vendorId !== COMMON_VENDOR_ID ? writer.writeUInt32(protocolId) : writer.writeUInt16(protocolId);
+        if (vendorId !== COMMON_VENDOR_ID) {
+            writer.writeUInt32(protocolId);
+        } else {
+            writer.writeUInt16(protocolId);
+        }
         if (ackedMessageCounter !== undefined) writer.writeUInt32(ackedMessageCounter);
         return writer.toByteArray();
     }

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -186,6 +186,18 @@ export class EndpointStore {
         await this.#construction;
 
         await this.#storage.clearAll();
+    }
+
+    /**
+     * Erase the child storage for one part
+     */
+    async eraseChildStoreFor(endpoint: Endpoint) {
+        await this.#construction;
+
+        const partId = endpoint.id;
+        const store = this.#childStores[partId];
+        await store.erase();
+        delete this.#childStores[partId];
     }
 
     async #loadSubparts() {

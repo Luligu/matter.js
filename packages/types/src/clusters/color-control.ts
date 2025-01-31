@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -1404,11 +1404,7 @@ export namespace ColorControl {
              *
              * @see {@link MatterSpecification.v13.Cluster} § 3.2.7.10
              */
-            colorMode: Attribute(
-                0x8,
-                TlvEnum<ColorMode>(),
-                { persistent: true, default: ColorMode.CurrentXAndCurrentY }
-            ),
+            colorMode: Attribute(0x8, TlvEnum<ColorMode>(), { persistent: true }),
 
             /**
              * The Options attribute is meant to be changed only during commissioning. The Options attribute is a

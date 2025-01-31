@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -101,7 +101,7 @@ export class Agent {
     /**
      * Trigger initialization of a supported {@link Behavior.Type}.
      *
-     * Functionally identical to {@link load} but has no return value and errors are logged rathjer than thrown.
+     * Functionally identical to {@link load} but has no return value and errors are logged rather than thrown.
      */
     activate(type: Behavior.Type) {
         this.#endpoint.behaviors.activate(type, this);

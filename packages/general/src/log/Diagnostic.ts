@@ -1,11 +1,13 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
 import type { Lifecycle } from "../util/Lifecycle.js";
 import { LogLevel } from "./LogLevel.js";
+
+let errorCollector: undefined | ((error: {}) => boolean);
 
 /**
  * Logged values may implement this interface to customize presentation.
@@ -59,6 +61,11 @@ export namespace Diagnostic {
         Weak = "weak",
 
         /**
+         * A keylike diagnostic to list flags.  The key gets suppressed and the value is rendered as a key.
+         */
+        Flag = "flag",
+
+        /**
          * An error message diagnostic.
          */
         Error = "error",
@@ -72,6 +79,67 @@ export namespace Diagnostic {
          * Path, resource or session identifier.
          */
         Via = "via",
+
+        /**
+         * Resource that was added.
+         */
+        Added = "added",
+
+        /**
+         * Resource that was removed.
+         */
+        Deleted = "deleted",
+    }
+
+    export interface Context {
+        run<T>(fn: () => T): T;
+    }
+
+    /**
+     * Diagnostic context provides contextual information that affects formatting.
+     */
+    export function Context(): Context {
+        let errorsCollected: undefined | {}[];
+        const errorsReported = new WeakSet<{}>();
+
+        const thisErrorCollector = (error: {}) => {
+            // Indicate to caller this error is already reported
+            if (errorsReported.has(error)) {
+                return true;
+            }
+
+            // Collect the error so it can be marked as reported if a contextual operation succeeds
+            if (errorsCollected) {
+                errorsCollected.push(error);
+            } else {
+                errorsCollected = [error];
+            }
+
+            // Indicate to caller this error is as yet unreported
+            return false;
+        };
+
+        return {
+            run(fn) {
+                const originalErrorCollector = errorCollector;
+                try {
+                    errorCollector = thisErrorCollector;
+
+                    const result = fn();
+
+                    if (errorsCollected) {
+                        for (const error of errorsCollected) {
+                            errorsReported.add(error);
+                        }
+                        errorsCollected = undefined;
+                    }
+
+                    return result;
+                } finally {
+                    errorCollector = originalErrorCollector;
+                }
+            },
+        };
     }
 
     export const presentation = Symbol("presentation");
@@ -117,6 +185,13 @@ export namespace Diagnostic {
     }
 
     /**
+     * Create a value presented as key
+     */
+    export function flag(value: string) {
+        return Diagnostic(Diagnostic.Presentation.Flag, value);
+    }
+
+    /**
      * Create a value identifying the source of a diagnostic event.
      */
     export function via(value: string) {
@@ -126,6 +201,20 @@ export namespace Diagnostic {
         const via = new String(value);
         Object.defineProperty(via, presentation, { value: Presentation.Via });
         return via as string;
+    }
+
+    /**
+     * Create a value identifying a resource that was added.
+     */
+    export function added(value: unknown) {
+        return Diagnostic(Diagnostic.Presentation.Added, value);
+    }
+
+    /**
+     * Create a value identifying a resource that was removed.
+     */
+    export function deleted(value: unknown) {
+        return Diagnostic(Diagnostic.Presentation.Deleted, value);
     }
 
     /**
@@ -160,11 +249,19 @@ export namespace Diagnostic {
     /**
      * Create a K/V map that presents with formatted keys.
      */
-    export function dict(entries: object): Record<string, unknown> & Diagnostic {
-        return {
+    export function dict(entries: object, suppressUndefinedValues = true): Record<string, unknown> & Diagnostic {
+        const result: any = {
             ...entries,
             [presentation]: Diagnostic.Presentation.Dictionary,
         };
+        if (suppressUndefinedValues) {
+            for (const key in result) {
+                if (result[key] === undefined) {
+                    delete result[key];
+                }
+            }
+        }
+        return result;
     }
 
     /**
@@ -276,13 +373,30 @@ export namespace Diagnostic {
     export function hex(value: number | bigint) {
         return `0x${value.toString(16)}`;
     }
+
+    /**
+     * Convert an object with keys to a flag list listing the truthy keys in a keylike/flag presentation.
+     */
+    export function asFlags(flags: Record<string, unknown>) {
+        return Diagnostic.flag(Diagnostic.toFlagString(flags));
+    }
+
+    /**
+     * Convert an object with keys to a space-separated list of truthy keys.
+     */
+    export function toFlagString(flags: Record<string, unknown>) {
+        return Object.entries(flags)
+            .filter(([, value]) => !!value)
+            .map(([key]) => key)
+            .join(" ");
+    }
 }
 
 function formatError(error: any, options: { messagePrefix?: string; parentStack?: string[] } = {}) {
     const { messagePrefix, parentStack } = options;
 
     const messageAndStack = messageAndStackFor(error, parentStack);
-    const { stack, stackLines } = messageAndStack;
+    let { stack, stackLines } = messageAndStack;
 
     let { message } = messageAndStack;
     if (messagePrefix) {
@@ -296,12 +410,20 @@ function formatError(error: any, options: { messagePrefix?: string; parentStack?
         ({ cause, errors } = error);
     }
 
+    // Report the error to context.  If return value is true, stack is already reported in this context so omit
+    if (errorCollector?.(error)) {
+        stack = stackLines = undefined;
+    }
+
     if (stack === undefined && cause === undefined && errors === undefined) {
         return message;
     }
 
     const list: Array<string | Diagnostic> = [message];
-    if (stack !== undefined) {
+    if (stack === undefined) {
+        // Ensure line break in case of no stack
+        list.push(Diagnostic(Diagnostic.Presentation.List, []));
+    } else {
         list.push(Diagnostic(Diagnostic.Presentation.List, stack));
     }
 
@@ -428,7 +550,7 @@ function messageAndStackFor(error: any, parentStack?: string[]) {
     // Spiff up stack lines a bit
     const stack = Array<unknown>();
     for (const line of stackLines) {
-        const match1 = line.match(/^at\s+(?:(.+)\s+\(([^)]+)\)|(<anonymous>))$/);
+        const match1 = line.match(/^at\s+(?:(\S|\S.*\S)\s+\(([^)]+)\)|(<anonymous>))$/);
         if (match1) {
             const value = [Diagnostic.weak("at "), match1[1] ?? match1[3]];
             if (match1[2] !== undefined) {
@@ -438,7 +560,7 @@ function messageAndStackFor(error: any, parentStack?: string[]) {
             continue;
         }
 
-        const match2 = line.match(/^at\s+(.+)(:\d+:\d+)$/);
+        const match2 = line.match(/^at\s+(\S.*)(:\d+:\d+)$/);
         if (match2) {
             stack.push(Diagnostic.squash(Diagnostic.weak("at "), match2[1], Diagnostic.weak(match2[2])));
             continue;

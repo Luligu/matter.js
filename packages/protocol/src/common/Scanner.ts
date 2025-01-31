@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -158,7 +158,7 @@ export interface Scanner {
     cancelCommissionableDeviceDiscovery(identifier: CommissionableDeviceIdentifiers, resolvePromise?: boolean): void;
 
     /** Close the scanner server and free resources. */
-    close(): void;
+    close(): Promise<void>;
 }
 
 export class ScannerSet extends BasicSet<Scanner> {

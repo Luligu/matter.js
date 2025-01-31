@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -107,7 +107,7 @@ export class Project {
             return;
         }
 
-        const declarations = (await this.pkg.glob(`dist/${path}/**/*.d.ts*`)).sort();
+        const declarations = (await this.pkg.glob(`dist/${path}/**/*.d.{ts,mts,cts}`)).sort();
         for (const file of declarations) {
             apiSha.update(file);
             apiSha.update(await readFile(file));

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -26,7 +26,7 @@ const Base = OnOffBehavior.with(OnOff.Feature.Lighting);
  * specific, so this needs to be implemented by the device implementor as needed.
  */
 export class OnOffServer extends Base {
-    protected declare internal: OnOffServer.Internal;
+    declare protected internal: OnOffServer.Internal;
 
     override initialize() {
         if (this.features.lighting && this.#getBootReason() !== GeneralDiagnostics.BootReason.SoftwareUpdateCompleted) {
@@ -53,6 +53,7 @@ export class OnOffServer extends Base {
     override on(): MaybePromise<void> {
         this.state.onOff = true;
         if (this.features.lighting) {
+            this.state.globalSceneControl = true;
             if (!this.timedOnTimer.isRunning) {
                 if (this.delayedOffTimer.isRunning) {
                     this.delayedOffTimer.stop();
@@ -71,7 +72,7 @@ export class OnOffServer extends Base {
                     this.delayedOffTimer.start();
                 }
             }
-            this.state.onTime = 0;
+            this.state.onTime = this.state.offWaitTime = 0;
         }
     }
 

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -23,6 +23,7 @@ import {
 import { MdnsScanner } from "#mdns/MdnsScanner.js";
 import { ControllerCommissioningFlow, ControllerCommissioningFlowOptions } from "#peer/ControllerCommissioningFlow.js";
 import { ControllerDiscovery, PairRetransmissionLimitReachedError } from "#peer/ControllerDiscovery.js";
+import { ChannelStatusResponseError } from "#securechannel/index.js";
 import { PaseClient } from "#session/index.js";
 import { SessionManager } from "#session/SessionManager.js";
 import { DiscoveryCapabilitiesBitmap, NodeId, SECURE_CHANNEL_PROTOCOL_ID, TypeFromPartialBitSchema } from "#types";
@@ -156,7 +157,7 @@ export class ControllerCommissioner {
                 channel = await this.#initializePaseSecureChannel(address, passcode, discoveryData);
             } catch (e) {
                 NoResponseTimeoutError.accept(e);
-                console.warn(`Could not connect to ${serverAddressToString(address)}: ${e.message}`);
+                logger.warn(`Could not connect to ${serverAddressToString(address)}: ${e.message}`);
             }
         }
 
@@ -319,6 +320,11 @@ export class ControllerCommissioner {
         } catch (e) {
             // Close the exchange and rethrow
             await paseExchange.close();
+            if (e instanceof ChannelStatusResponseError) {
+                throw new NoResponseTimeoutError(
+                    `Establishing PASE channel failed with channel status response error ${e.message}`,
+                );
+            }
             throw e;
         }
 
@@ -384,17 +390,15 @@ export class ControllerCommissioner {
             this.#context.ca,
             fabric,
             commissioningOptions,
-            async address => {
-                // TODO Right now we always close after step 12 because we do not check for commissioning flow requirements
-                /*
-                    In concurrent connection commissioning flow the commissioning channel SHALL terminate after
-                    successful step 15 (CommissioningComplete command invocation). In non-concurrent connection
-                    commissioning flow the commissioning channel SHALL terminate after successful step 12 (trigger
-                    joining of operational network at Commissionee). The PASE-derived encryption keys SHALL be deleted
-                    when commissioning channel terminates. The PASE session SHALL be terminated by both Commissioner and
-                    Commissionee once the CommissioningComplete command is received by the Commissionee.
-                 */
-                await paseSecureMessageChannel.close(); // We reconnect using Case, so close PASE connection
+            async (address, supportsConcurrentConnections) => {
+                if (!supportsConcurrentConnections) {
+                    /*
+                        In non-concurrent connection
+                        commissioning flow the commissioning channel SHALL terminate after successful step 12 (trigger
+                        joining of operational network at Commissionee).
+                     */
+                    await paseSecureMessageChannel.close(); // We reconnect using Case, so close PASE connection
+                }
 
                 if (performCaseCommissioning !== undefined) {
                     await performCaseCommissioning(address, discoveryData);
@@ -420,6 +424,15 @@ export class ControllerCommissioner {
             // We might have added data for an operational address that we need to cleanup
             await this.#context.peers.delete(address);
             throw error;
+        } finally {
+            if (!paseSecureMessageChannel.closed) {
+                /*
+                    In concurrent connection commissioning flow the commissioning channel SHALL terminate after
+                    successful step 15 (CommissioningComplete command invocation).
+                    If PaseSecureMessageChannel is not already closed, we are in non-concurrent connection commissioning flow.
+                 */
+                await paseSecureMessageChannel.close(); // We are done, so close PASE session
+            }
         }
 
         return address;

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -111,8 +111,8 @@ const NODE_ID = NodeId(BigInt(1));
         afterEach(async () => {
             await broadcaster.close();
             await scanner.close();
-            scannerChannel.close();
-            broadcasterChannel.close();
+            await scannerChannel.close();
+            await broadcasterChannel.close();
         });
 
         const processRecordExpiry = async (port: number) => {
@@ -126,6 +126,7 @@ const NODE_ID = NodeId(BigInt(1));
             await MockTime.advance(150);
             await MockTime.yield3();
             await MockTime.yield3();
+            await MockTime.advance(150);
             await promise;
         };
 
@@ -1079,7 +1080,8 @@ const NODE_ID = NodeId(BigInt(1));
                         VP: "1+32768",
                         addresses: IPIntegrationResultsPort1,
                         deviceIdentifier: "0000000000000000",
-                        expires: undefined,
+                        discoveredAt: undefined,
+                        ttl: undefined,
                         instanceId: "0000000000000000",
                     },
                 ]);

@@ -1,9 +1,10 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { MatterAggregateError } from "#MatterError.js";
 import { MaybePromise } from "../util/Promises.js";
 import { Storage, StorageError, StorageOperationResult } from "./Storage.js";
 import { SupportedStorageTypes } from "./StringifyTools.js";
@@ -92,7 +93,10 @@ export class StorageContext<S extends Storage = any> implements StorageContextFa
         const keys = this.keys();
         if (MaybePromise.is(keys)) {
             return keys.then(keys => {
-                return Promise.all(keys.map(key => this.delete(key))).then(() => Promise.resolve());
+                return MatterAggregateError.allSettled(
+                    keys.map(key => this.delete(key)),
+                    "Error while clearing storage",
+                ).then(() => {});
             }) as StorageOperationResult<S>;
         }
         const promises = new Array<PromiseLike<void>>();
@@ -103,7 +107,9 @@ export class StorageContext<S extends Storage = any> implements StorageContextFa
             }
         });
         if (promises.length > 0) {
-            return Promise.all(promises).then(() => Promise.resolve()) as StorageOperationResult<S>;
+            return MatterAggregateError.allSettled(promises, "Error while clearing storage").then(
+                () => {},
+            ) as StorageOperationResult<S>;
         }
         return undefined as StorageOperationResult<S>;
     }

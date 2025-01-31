@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -240,7 +240,6 @@ export const MockTime = {
         if (isAsync(interceptor)) {
             obj[method] = async function (this: any, ...args: any): Promise<any> {
                 try {
-                    // eslint-disable-next-line @typescript-eslint/await-thenable
                     const resolve = await original.apply(this, args);
                     result = { resolve } as any;
                 } catch (reject) {
@@ -250,7 +249,7 @@ export const MockTime = {
                 }
                 result = (await interceptor(result)) ?? result;
                 if (result.reject) {
-                    throw result.reject;
+                    throw result.reject as Error;
                 }
                 return result.resolve;
             } as any;
@@ -266,7 +265,7 @@ export const MockTime = {
                 }
                 result = (interceptor(result) as any) ?? result;
                 if (result.reject) {
-                    throw result.reject;
+                    throw result.reject as Error;
                 }
                 return result.resolve;
             } as any;
@@ -287,7 +286,8 @@ export const MockTime = {
 
 let reinstallTime: undefined | (() => void);
 
-export function timeSetup(Time: { get(): unknown }) {
+export function timeSetup(Time: { startup: { systemMs: number; processMs: number }; get(): unknown }) {
+    Time.startup.systemMs = Time.startup.processMs = 0;
     real = Time.get();
     (MockTime as any).sleep = (real as any).sleep;
     reinstallTime = () => (Time.get = () => MockTime.activeImplementation);

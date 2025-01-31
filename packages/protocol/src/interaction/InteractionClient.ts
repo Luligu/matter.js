@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -20,6 +20,7 @@ import { Specification } from "#model";
 import { PeerAddress } from "#peer/PeerAddress.js";
 import { PeerDataStore } from "#peer/PeerAddressStore.js";
 import {
+    ArraySchema,
     Attribute,
     AttributeId,
     AttributeJsType,
@@ -440,8 +441,10 @@ export class InteractionClient {
         timedRequestTimeoutMs?: number;
         suppressResponse?: boolean;
         executeQueued?: boolean;
+        chunkLists?: boolean;
     }): Promise<void> {
-        const { attributeData, asTimedRequest, timedRequestTimeoutMs, suppressResponse, executeQueued } = options;
+        const { attributeData, asTimedRequest, timedRequestTimeoutMs, suppressResponse, executeQueued, chunkLists } =
+            options;
         const { endpointId, clusterId, attribute, value, dataVersion } = attributeData;
         const response = await this.setMultipleAttributes({
             attributes: [{ endpointId, clusterId, attribute, value, dataVersion }],
@@ -449,6 +452,7 @@ export class InteractionClient {
             timedRequestTimeoutMs,
             suppressResponse,
             executeQueued,
+            chunkLists,
         });
 
         // Response contains Status error if there was an error on write
@@ -478,6 +482,7 @@ export class InteractionClient {
         timedRequestTimeoutMs?: number;
         suppressResponse?: boolean;
         executeQueued?: boolean;
+        chunkLists?: boolean;
     }): Promise<AttributeStatus[]> {
         const { executeQueued } = options;
 
@@ -486,6 +491,7 @@ export class InteractionClient {
             asTimedRequest,
             timedRequestTimeoutMs = DEFAULT_TIMED_REQUEST_TIMEOUT_MS,
             suppressResponse = false, // TODO needs to be TRUE for Group writes
+            chunkLists = true, // Should be true currently to stay in sync with chip sdk
         } = options;
         logger.debug(
             `Sending write request: ${attributes
@@ -497,12 +503,25 @@ export class InteractionClient {
                 )
                 .join(", ")}`,
         );
-        const writeRequests = attributes.map(
-            ({ endpointId, clusterId, attribute: { id, schema }, value, dataVersion }) => ({
-                path: { endpointId, clusterId, attributeId: id },
-                data: schema.encodeTlv(value, { forWriteInteraction: true }),
-                dataVersion,
-            }),
+        const writeRequests = attributes.flatMap(
+            ({ endpointId, clusterId, attribute: { id, schema }, value, dataVersion }) => {
+                if (chunkLists && Array.isArray(value) && schema instanceof ArraySchema) {
+                    return schema
+                        .encodeAsChunkedArray(value, { forWriteInteraction: true })
+                        .map(({ element: data, listIndex }) => ({
+                            path: { endpointId, clusterId, attributeId: id, listIndex },
+                            data,
+                            dataVersion,
+                        }));
+                }
+                return [
+                    {
+                        path: { endpointId, clusterId, attributeId: id },
+                        data: schema.encodeTlv(value, { forWriteInteraction: true }),
+                        dataVersion,
+                    },
+                ];
+            },
         );
         const timedRequest =
             attributes.some(({ attribute: { timed } }) => timed) ||
@@ -621,7 +640,6 @@ export class InteractionClient {
             updateReceived?.();
 
             if (!Array.isArray(dataReport.attributeReports) || !dataReport.attributeReports.length) {
-                logger.debug(`Subscription result empty for subscription ID ${dataReport.subscriptionId}`);
                 return;
             }
 
@@ -715,7 +733,6 @@ export class InteractionClient {
             updateReceived?.();
 
             if (!Array.isArray(dataReport.eventReports) || !dataReport.eventReports.length) {
-                logger.debug(`Subscription result empty for subscription ID ${dataReport.subscriptionId}`);
                 return;
             }
 
@@ -889,10 +906,30 @@ export class InteractionClient {
                 (!Array.isArray(dataReport.attributeReports) || !dataReport.attributeReports.length) &&
                 (!Array.isArray(dataReport.eventReports) || !dataReport.eventReports.length)
             ) {
-                logger.debug(`Subscription result empty for subscription ID ${dataReport.subscriptionId}`);
                 return;
             }
             const { attributeReports, eventReports } = dataReport;
+
+            // We emit events first because events usually happened and lead to a new final attribute value
+            if (eventReports !== undefined) {
+                let maxEventNumber = this.#nodeStore?.maxEventNumber ?? eventReports[0].events[0].eventNumber;
+                eventReports.forEach(data => {
+                    logger.debug(
+                        `Received event update: ${resolveEventName(data.path)}: ${Logger.toJSON(data.events)}`,
+                    );
+                    const { events } = data;
+
+                    maxEventNumber =
+                        events.length === 1
+                            ? events[0].eventNumber
+                            : events.reduce(
+                                  (max, { eventNumber }) => (max < eventNumber ? eventNumber : max),
+                                  maxEventNumber,
+                              );
+                    eventListener?.(data);
+                });
+                await this.#nodeStore?.updateLastEventNumber(maxEventNumber);
+            }
 
             if (attributeReports !== undefined) {
                 for (const data of attributeReports) {
@@ -918,26 +955,6 @@ export class InteractionClient {
 
                     attributeListener?.(data, changed, oldValue);
                 }
-            }
-
-            if (eventReports !== undefined) {
-                let maxEventNumber = this.#nodeStore?.maxEventNumber ?? eventReports[0].events[0].eventNumber;
-                eventReports.forEach(data => {
-                    logger.debug(
-                        `Received event update: ${resolveEventName(data.path)}: ${Logger.toJSON(data.events)}`,
-                    );
-                    const { events } = data;
-
-                    maxEventNumber =
-                        events.length === 1
-                            ? events[0].eventNumber
-                            : events.reduce(
-                                  (max, { eventNumber }) => (max < eventNumber ? eventNumber : max),
-                                  maxEventNumber,
-                              );
-                    eventListener?.(data);
-                });
-                await this.#nodeStore?.updateLastEventNumber(maxEventNumber);
             }
         };
         this.registerSubscriptionListener(subscriptionId, async dataReport => {

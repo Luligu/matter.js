@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -96,6 +96,9 @@ export function asBoolean(node: StaticNode) {
         case Code.Conformant:
         case Code.Optional:
             return true;
+
+        case Code.Value:
+            return !!node.value;
 
         default:
             return false;

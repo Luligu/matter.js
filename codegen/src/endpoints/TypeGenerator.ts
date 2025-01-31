@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -80,7 +80,7 @@ export class TypeGenerator {
         }
 
         for (const child of model.children) {
-            if (child.isDeprecated || child.isDisallowed) {
+            if (child.isDisallowed || (child.isDeprecated && !child.type)) {
                 continue;
             }
             return false;

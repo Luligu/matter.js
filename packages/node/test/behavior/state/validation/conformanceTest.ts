@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -258,6 +258,7 @@ const AllTests = Tests({
                 Fields(
                     { name: "Value", type: "uint8" },
                     { name: "ValueIsSet", type: "bool", conformance: "F & Value" },
+                    { name: "UnsupportedValueIsSet", type: "bool", conformance: "F & UnsupportedValue" },
                 ),
                 {
                     "allows if present": {

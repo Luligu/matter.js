@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 import { UnexpectedDataError } from "../MatterError.js";
@@ -203,7 +203,7 @@ export class DerCodec {
     }
 
     private static encodePrintableString(value: string) {
-        if (!/^[A-Za-z0-9 '()+,-./:=?]*$/g.test(value)) {
+        if (!/^[a-z0-9 '()+,\-./:=?]*$/i.test(value)) {
             throw new UnexpectedDataError(`String ${value} is not a printable string.`);
         }
         return this.encodeAsn1(DerType.PrintableString, Bytes.fromString(value));
@@ -277,7 +277,7 @@ export class DerCodec {
         if ((tag & CONSTRUCTED) === 0) return { [DerKey.TagId]: tag, [DerKey.Bytes]: bytes };
         const elementsReader = new DataReader(bytes, Endian.Big);
         const elements: DerNode[] = [];
-        while (elementsReader.getRemainingBytesCount() > 0) {
+        while (elementsReader.remainingBytesCount > 0) {
             elements.push(this.decodeRec(elementsReader));
         }
         return { [DerKey.TagId]: tag, [DerKey.Bytes]: bytes, [DerKey.Elements]: elements };

@@ -1,15 +1,17 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { RootSupervisor } from "#behavior/supervision/RootSupervisor.js";
 import { camelize } from "#general";
 import { Conformance, DataModelPath, FeatureSet, FieldValue, Metatype, ValueModel } from "#model";
 import { AccessControl } from "../../AccessControl.js";
 import { ConformanceError, SchemaImplementationError } from "../../errors.js";
 import { Schema } from "../../supervision/Schema.js";
 import { ValueSupervisor } from "../../supervision/ValueSupervisor.js";
+import { NameResolver } from "../managed/NameResolver.js";
 import { Val } from "../Val.js";
 import {
     Code,
@@ -49,13 +51,12 @@ import { ValidationLocation } from "./location.js";
  *   - "runtime" means conformance depends on sibling fields in an object. These result in a {@link RuntimeNode} with
  *     additional logic that applies to operational state.
  */
-export function astToFunction(
-    schema: ValueModel,
-    featureMap: ValueModel,
-    supportedFeatures: FeatureSet,
-): ValueSupervisor.Validate | undefined {
+export function astToFunction(schema: ValueModel, supervisor: RootSupervisor): ValueSupervisor.Validate | undefined {
     const ast = schema.conformance.ast;
-    const { featuresAvailable, featuresSupported } = FeatureSet.normalize(featureMap, supportedFeatures);
+    const { featuresAvailable, featuresSupported } = FeatureSet.normalize(
+        supervisor.featureMap,
+        supervisor.supportedFeatures,
+    );
 
     // Compile the AST
     const compiledNode = compile(ast);
@@ -312,19 +313,24 @@ export function astToFunction(
                 return NonconformantNode;
             }
         } else {
-            // Name references a sibling property.  This results in a value node but must be evaluated at runtime
-            // against a specific struct
-            param = camelize(param);
-            return {
-                code: Code.Evaluate,
+            // Name references another value.  This results in a value node but must be evaluated at runtime against a
+            // specific struct
+            const resolver = NameResolver(supervisor, schema.parent, camelize(param));
+            if (resolver) {
+                return {
+                    code: Code.Evaluate,
 
-                evaluate: (_value, options) => {
-                    return {
-                        code: Code.Value,
-                        value: options?.siblings?.[param],
-                    };
-                },
-            };
+                    evaluate: (_value, options) => {
+                        return {
+                            code: Code.Value,
+                            value: resolver(options?.siblings),
+                        };
+                    },
+                };
+            }
+
+            // Unresolved names are always undefined
+            return { code: Code.Value, value: undefined };
         }
     }
 
@@ -416,7 +422,7 @@ export function astToFunction(
                 // Static LHS
                 if (isStatic(compiledLhs)) {
                     if (asBoolean(compiledLhs)) {
-                        return compiledRhs;
+                        return asNonvalue(compiledRhs);
                     } else {
                         return NonconformantNode;
                     }
@@ -425,7 +431,7 @@ export function astToFunction(
                 // Dynamic LHS, static RHS
                 if (isStatic(compiledRhs)) {
                     if (asBoolean(compiledRhs)) {
-                        return compiledLhs;
+                        return asNonvalue(compiledLhs);
                     } else {
                         return NonconformantNode;
                     }
@@ -440,7 +446,7 @@ export function astToFunction(
                     if (asBoolean(compiledLhs)) {
                         return ConformantNode;
                     } else {
-                        return compiledRhs;
+                        return asNonvalue(compiledRhs);
                     }
                 }
 
@@ -449,7 +455,7 @@ export function astToFunction(
                     if (asBoolean(compiledRhs)) {
                         return ConformantNode;
                     } else {
-                        return compiledLhs;
+                        return asNonvalue(compiledLhs);
                     }
                 }
 
@@ -462,7 +468,7 @@ export function astToFunction(
                     if (asBoolean(compiledLhs)) {
                         return createLogicalInversion(compiledRhs);
                     } else {
-                        return compiledRhs;
+                        return asNonvalue(compiledRhs);
                     }
                 }
 
@@ -471,7 +477,7 @@ export function astToFunction(
                     if (asBoolean(compiledRhs)) {
                         return createLogicalInversion(compiledLhs);
                     } else {
-                        return compiledLhs;
+                        return asNonvalue(compiledLhs);
                     }
                 }
 
@@ -530,6 +536,16 @@ export function astToFunction(
     }
 
     /**
+     * Convert a node to boolean result if it is a value.
+     */
+    function asNonvalue(node: DynamicNode) {
+        if (node.code === Code.Value) {
+            return asBoolean(node) ? ConformantNode : NonconformantNode;
+        }
+        return node;
+    }
+
+    /**
      * Extends the "main" validator (conformance on the field itself) with member validation (validation of specific
      * values).
      */
@@ -537,7 +553,7 @@ export function astToFunction(
         mainValidator: ValueSupervisor.Validate | undefined,
     ): ValueSupervisor.Validate | undefined {
         // If there are no members we can't enforce anything
-        const members = schema.activeMembers;
+        const members = supervisor.membersOf(schema);
         if (!members.length) {
             return mainValidator;
         }

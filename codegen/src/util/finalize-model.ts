@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -21,6 +21,27 @@ import {
 } from "#model";
 
 const logger = Logger.get("create-model");
+
+/**
+ * Create and validate the final model for export
+ **/
+export function finalizeModel(matter: MatterModel) {
+    matter.children.forEach(c => {
+        if (c instanceof ClusterModel) {
+            patchClusterTypes(c);
+            patchOptionsTypes(c);
+            patchStatusTypes(c);
+        }
+    });
+
+    ejectZigbee(matter);
+
+    logger.info(`validate ${matter.name}`);
+
+    return Logger.nest(() => {
+        return ValidateModel(matter);
+    });
+}
 
 /**
  * Get the properties of children without xrefs so we can compare types using isDeepEqual
@@ -225,25 +246,4 @@ function ejectZigbee(model: Model, zigbeeFeatures?: string[]) {
     if (filtered.length !== model.children.length) {
         model.children = filtered as AnyElement[];
     }
-}
-
-/**
- * Create and validate the final model for export
- **/
-export function finalizeModel(matter: MatterModel) {
-    matter.children.forEach(c => {
-        if (c instanceof ClusterModel) {
-            patchClusterTypes(c);
-            patchOptionsTypes(c);
-            patchStatusTypes(c);
-        }
-    });
-
-    ejectZigbee(matter);
-
-    logger.info(`validate ${matter.name}`);
-
-    return Logger.nest(() => {
-        return ValidateModel(matter);
-    });
 }

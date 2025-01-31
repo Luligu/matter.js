@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -58,5 +58,5 @@ export const WildcardPathFlags = {
     /**
      * Skip all clusters with the Diagnostics (K) quality during wildcard expansion.
      */
-    wildcardSkipDiagnosticsClusters: BitFlag(8),
+    wildcardSkipDiagnosticsClusters: BitFlag(8)
 };

@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -906,9 +906,11 @@ export class FabricScopedAttributeServer<T> extends AttributeServer<T> {
             value,
             <number>FabricIndex.id,
             session.associatedFabric.fabricIndex,
-            () => !preserveFabricIndex, // Noone should send any index and if we simply SHALL ignore it,  biuut internally we might need it
+            () => !preserveFabricIndex, // No one should send any index and if we simply SHALL ignore it,  but internally we might need it
         );
-        logger.info(`Set remote value for fabric scoped attribute "${this.name}" to ${Logger.toJSON(value)}`);
+        logger.info(
+            `Set remote value for fabric scoped attribute "${this.name}" to ${Logger.toJSON(value)} (delayed=${delayChangeEvents})`,
+        );
 
         super.setRemote(value, session, message, delayChangeEvents);
     }

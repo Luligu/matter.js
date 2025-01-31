@@ -1,6 +1,6 @@
 /**
  * @license
- * Copyright 2022-2024 Matter.js Authors
+ * Copyright 2022-2025 Matter.js Authors
  * SPDX-License-Identifier: Apache-2.0
  */
 import { Logger, Time, Timer } from "@matter/main";
@@ -30,7 +30,7 @@ type MoveData = {
  * waiting 1s.
  */
 export class TestWindowCoveringServer extends TestWindowCoveringServerBase {
-    protected declare internal: TestWindowCoveringServer.Internal;
+    declare protected internal: TestWindowCoveringServer.Internal;
 
     override initialize() {
         logger.info("TestWindowCoveringServer initialized");
