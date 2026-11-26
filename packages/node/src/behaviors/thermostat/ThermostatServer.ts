@@ -2342,11 +2342,17 @@ export class ThermostatBaseServer extends ThermostatBehaviorLogicBase {
     /**
      * Re-evaluates when the UTCTime of a TimeSynchronization cluster on the node changes: the default
      * {@link hasSynchronizedTime} follows it, and a new time may pass an EffectiveTime or ExpirationTime.
+     *
+     * The re-evaluation runs in its own transaction and waits for the thermostat, so a transaction that holds the
+     * thermostat does not fail the change of UTCTime.
      */
     #setupSuggestionTimeSource() {
         const node = Node.forEndpoint(this.endpoint);
         if (node.behaviors.has(TimeSynchronizationBehavior)) {
-            this.reactTo(node.eventsOf(TimeSynchronizationBehavior).utcTime$Changed, this.#reevaluateSuggestions);
+            this.reactTo(node.eventsOf(TimeSynchronizationBehavior).utcTime$Changed, this.#reevaluateSuggestions, {
+                offline: true,
+                lock: true,
+            });
         }
     }
 

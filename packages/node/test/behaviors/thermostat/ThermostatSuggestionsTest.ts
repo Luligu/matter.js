@@ -826,6 +826,47 @@ describe("Thermostat suggestions", () => {
                 MockTime.stepWallClock(0 - step);
             }
         });
+
+        it("re-evaluates on a change of UTCTime once a transaction that holds the thermostat ends", async () => {
+            await using ctx = await online(
+                {},
+                SuggestionsServer,
+                MockServerNode.RootEndpoint.with(TimeSynchronizationServer),
+            );
+            const setUtcTime = (utcTime: number | null) =>
+                MockTime.resolve(ctx.node.setStateOf(TimeSynchronizationServer, { utcTime }), { macrotasks: true });
+
+            await setUtcTime(Time.nowMs * 1000);
+            const { uniqueId } = await ctx.add({ presetHandle: PRESET_B });
+            await setUtcTime(null);
+            expect(ctx.state().currentThermostatSuggestion).equals(null);
+
+            let locked!: () => void;
+            const lockHeld = new Promise<void>(resolve => (locked = resolve));
+
+            let release!: () => void;
+            const releaseLock = new Promise<void>(resolve => (release = resolve));
+
+            const holder = ctx.node.online({ command: true }, async agent => {
+                const { transaction } = agent.context;
+                await transaction.addResources(ctx.device.agentFor(agent.context).get(SuggestionsServer));
+                await transaction.begin();
+                locked();
+                await releaseLock;
+            });
+
+            await MockTime.resolve(lockHeld, { macrotasks: true });
+
+            // The thermostat is locked, so a re-evaluation in the transaction that changes UTCTime cannot run
+            await setUtcTime(Time.nowMs * 1000);
+            expect(ctx.state().currentThermostatSuggestion).equals(null);
+
+            release();
+            await holder;
+            await settle();
+
+            expect(ctx.state().currentThermostatSuggestion?.uniqueId).equals(uniqueId);
+        });
     });
 
     describe("following", () => {
