@@ -14,6 +14,9 @@ The main work (all changes without a GitHub username in brackets in the below li
 - @matter/model
     - Fix: `SelectDefaultValue` returns null for a nullable struct or bitmap without a stated default, so `CommodityPrice` `currentPrice` and `DeviceEnergyManagement` `forecast` default to null instead of an incomplete struct
 
+- @matter/node
+    - Fix: (@Luligu) `ThermostatServer` re-evaluates the thermostat suggestions on a change of the TimeSynchronization `UTCTime` in its own transaction, instead of failing with a synchronous-transaction-conflict while another transaction holds the thermostat
+
 ## 0.18.1 (2026-11-25)
 
 - @matter/examples
